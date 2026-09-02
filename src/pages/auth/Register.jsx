@@ -22,18 +22,23 @@ const Register = () => {
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (!formData.name || !formData.email) {
       setError('Please fill in all required fields.');
       return;
     }
+    if (!formData.password || formData.password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
     setLoading(true);
     try {
-      const user = authService.register(formData);
+      const user = await authService.register(formData);
       setLoading(false);
-      if (user.role === 'buyer') navigate('/buyer');
+      if (user.role === 'admin') navigate('/admin');
+      else if (user.role === 'buyer') navigate('/buyer');
       else navigate('/seller');
     } catch (err) {
       setLoading(false);

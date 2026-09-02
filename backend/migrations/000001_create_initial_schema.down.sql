@@ -1,0 +1,9 @@
+-- WorkStream Database Schema Rollback - 000001_create_initial_schema.down.sql
+DROP TABLE IF EXISTS reviews CASCADE;
+DROP TABLE IF EXISTS favorites CASCADE;
+DROP TABLE IF EXISTS orders CASCADE;
+DROP TABLE IF EXISTS service_packages CASCADE;
+DROP TABLE IF EXISTS services CASCADE;
+DROP TABLE IF EXISTS subcategories CASCADE;
+DROP TABLE IF EXISTS categories CASCADE;
+DROP TABLE IF EXISTS users CASCADE;

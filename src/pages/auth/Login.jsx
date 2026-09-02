@@ -12,13 +12,14 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (!email) { setError('Email address is required.'); return; }
+    if (!password) { setError('Password is required.'); return; }
     setLoading(true);
     try {
-      const user = authService.login(email);
+      const user = await authService.login(email, password);
       setLoading(false);
       if (user.role === 'admin') navigate('/admin');
       else if (user.role === 'buyer') navigate('/buyer');
@@ -29,15 +30,19 @@ const Login = () => {
     }
   };
 
-  const handleQuickLogin = (quickEmail) => {
+  const handleQuickLogin = async (quickEmail) => {
     setEmail(quickEmail);
     setError('');
+    setLoading(true);
     try {
-      const user = authService.login(quickEmail);
+      // Quick login uses placeholder password — LocalStorage mode only
+      const user = await authService.login(quickEmail, 'workstream123');
+      setLoading(false);
       if (user.role === 'admin') navigate('/admin');
       else if (user.role === 'buyer') navigate('/buyer');
       else navigate('/seller');
     } catch (err) {
+      setLoading(false);
       setError(err.message);
     }
   };
