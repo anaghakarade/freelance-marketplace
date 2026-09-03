@@ -12,4 +12,5 @@ type Review struct {
 	Comment   string    `json:"comment"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	User      *User     `json:"user,omitempty"`
 }

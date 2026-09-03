@@ -32,6 +32,7 @@ type Service struct {
 	Status          string                    `json:"status"` // published, draft, archived
 	IsFeatured      bool                      `json:"isFeatured"`
 	IsTrending      bool                      `json:"isTrending"`
+	ViewsCount      int                       `json:"viewsCount"`
 	CoverImage      string                    `json:"coverImage"`
 	GalleryImages   []string                  `json:"galleryImages"`
 	Description     string                    `json:"description"`
@@ -46,4 +47,20 @@ type Service struct {
 	UpdatedAt       time.Time                 `json:"updatedAt"`
 	Packages        map[string]ServicePackage `json:"packages,omitempty"`
 	Seller          *User                     `json:"seller,omitempty"`
+	Reviews         []Review                  `json:"reviews,omitempty"`
+}
+
+// TrendingGroup represents a curated discovery collection of services
+type TrendingGroup struct {
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	Slug        string    `json:"slug"`
+	Description string    `json:"description"`
+	Image       string    `json:"image"`
+	SortOrder   int       `json:"sortOrder"`
+	IsActive    bool      `json:"isActive"`
+	ServiceIDs  []string  `json:"serviceIds,omitempty"`
+	Services    []Service `json:"services,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }

@@ -32,7 +32,7 @@ func RespondError(c *gin.Context, status int, message string, details ...string)
 		detailMsg = details[0]
 	}
 	c.JSON(status, models.APIErrorResponse{
-		Error:   true,
+		Success: false,
 		Message: message,
 		Details: detailMsg,
 	})

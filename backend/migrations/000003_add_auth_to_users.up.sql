@@ -20,11 +20,11 @@ UPDATE users SET is_active = TRUE WHERE status = 'active';
 UPDATE users SET is_active = FALSE WHERE status IN ('inactive', 'suspended');
 
 -- Set bcrypt hash for password 'workstream123' (cost 10) for all seed users
--- Hash: $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lN0y
-UPDATE users SET password_hash = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lN0y'
-WHERE id IN ('usr_1','usr_2','usr_3','usr_4','usr_5','usr_6','usr_7','usr_8','usr_9','usr_10','usr_11','usr_12');
+-- Hash: $2a$10$52u5s7EQ8Z36x/hAeEPDj.A0NqP1ZevAFCm8gQqrEo2S0QNl7soAi
+UPDATE users SET password_hash = '$2a$10$52u5s7EQ8Z36x/hAeEPDj.A0NqP1ZevAFCm8gQqrEo2S0QNl7soAi'
+WHERE id IN ('usr_1','usr_2','usr_3','usr_4','usr_5','usr_6','usr_7','usr_8','usr_9','usr_11','usr_12');
 
 -- Set admin password hash for 'admin123' (cost 10)
--- Hash: $2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi
-UPDATE users SET password_hash = '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
-WHERE role = 'admin';
+-- Hash: $2a$10$MiPKNgjEswfpvRz1SDLqLOBHXESgCXp.eg55xf.9n9A70t7IZf76W
+UPDATE users SET password_hash = '$2a$10$MiPKNgjEswfpvRz1SDLqLOBHXESgCXp.eg55xf.9n9A70t7IZf76W'
+WHERE role = 'admin' OR id = 'usr_10';

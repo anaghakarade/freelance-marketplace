@@ -9,7 +9,7 @@ type APIResponse struct {
 
 // APIErrorResponse defines a consistent, user-friendly JSON error response structure
 type APIErrorResponse struct {
-	Error   bool   `json:"error"`
+	Success bool   `json:"success"`
 	Message string `json:"message"`
 	Details string `json:"details,omitempty"`
 }
