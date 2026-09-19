@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
