@@ -46,12 +46,35 @@ func SetupRouter(
 
 	// Environment-driven CORS configuration
 	corsConfig := cors.Config{
-		AllowOrigins:     cfg.CORSAllowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
+	}
+
+	hasWildcard := false
+	for _, o := range cfg.CORSAllowedOrigins {
+		if o == "*" {
+			hasWildcard = true
+			break
+		}
+	}
+
+	if hasWildcard || len(cfg.CORSAllowedOrigins) == 0 {
+		corsConfig.AllowOriginFunc = func(origin string) bool { return true }
+	} else {
+		corsConfig.AllowOriginFunc = func(origin string) bool {
+			for _, allowed := range cfg.CORSAllowedOrigins {
+				if allowed == origin {
+					return true
+				}
+			}
+			// Automatically allow Render deployments and local dev
+			return strings.HasSuffix(origin, ".onrender.com") ||
+				strings.HasPrefix(origin, "http://localhost:") ||
+				strings.HasPrefix(origin, "http://127.0.0.1:")
+		}
 	}
 	router.Use(cors.New(corsConfig))
 

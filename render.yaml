@@ -26,10 +26,7 @@ services:
       - key: JWT_EXPIRATION_HOURS
         value: 24
       - key: CORS_ALLOWED_ORIGINS
-        fromService:
-          type: web
-          name: workstream-frontend
-          property: url
+        value: "*"
 
   # ----------------------------------------------------------------------------
   # Frontend React SPA Static Site
@@ -45,11 +42,7 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: workstream-backend
-          property: url
-          postfix: /api
+        sync: false
 
 # ------------------------------------------------------------------------------
 # Managed PostgreSQL Database
