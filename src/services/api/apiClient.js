@@ -9,8 +9,14 @@
  * can clear the session without creating a circular import dependency.
  */
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api';
+const rawBase =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:8081/api';
+
+const API_BASE_URL = rawBase.endsWith('/api')
+  ? rawBase
+  : `${rawBase.replace(/\/+$/, '')}/api`;
 
 const TOKEN_KEY = 'workstream_token';
 
