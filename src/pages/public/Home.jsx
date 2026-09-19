@@ -102,8 +102,15 @@ export default function Home() {
 
   useEffect(() => {
     const timer = setTimeout(() => setHeroVisible(true), 80);
-    setPopularServices(marketplaceService.getFeaturedServices(4));
-    setTrendingServices(marketplaceService.getTrendingServices(4));
+
+    marketplaceService.getFeaturedServices(4)
+      .then(services => setPopularServices(services || []))
+      .catch(err => console.error('[Home] Failed to load featured services:', err));
+
+    marketplaceService.getTrendingServices(4)
+      .then(services => setTrendingServices(services || []))
+      .catch(err => console.error('[Home] Failed to load trending services:', err));
+
     setTrendingGroups(marketplaceService.getTrendingGroups().slice(0, 4));
 
     // Load talent demo data

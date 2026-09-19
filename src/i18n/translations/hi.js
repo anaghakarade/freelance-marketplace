@@ -92,5 +92,30 @@ export const hi = {
     trustHeader: "विश्वास और सुरक्षा",
     resourcesHeader: "संसाधन",
     copyright: "WorkStream फ्रीलांस मार्केटप्लेस। सर्वाधिकार सुरक्षित।"
+  },
+  contracts: {
+    contracts: "अनुबंध",
+    contract: "अनुबंध",
+    milestones: "मील के पत्थर",
+    milestone: "मील का पत्थर",
+    progress: "प्रगति",
+    approved: "स्वीकृत",
+    pending: "लंबित",
+    inProgress: "प्रगति में",
+    submitted: "जमा किया गया",
+    revisionRequested: "संशोधन का अनुरोध किया",
+    completed: "पूर्ण",
+    cancelled: "रद्द",
+    submitWork: "कार्य जमा करें",
+    approve: "स्वीकार करें",
+    requestRevision: "संशोधन का अनुरोध करें",
+    awaitingReview: "समीक्षा की प्रतीक्षा में",
+    startMilestone: "मील का पत्थर शुरू करें",
+    expectedCompletion: "अपेक्षित पूर्णता",
+    agreedBudget: "सहमति बजट",
+    dueDate: "नियत तारीख",
+    buyer: "खरीदार",
+    freelancer: "फ्रीलांसर",
+    openWorkspace: "कार्यक्षेत्र खोलें"
   }
 };

@@ -18,7 +18,10 @@ var (
 type CategoryRepository interface {
 	GetAll(ctx context.Context) ([]models.Category, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Category, error)
+	GetByID(ctx context.Context, id string) (*models.Category, error)
 	GetSubcategoriesByCategorySlug(ctx context.Context, categorySlug string) ([]models.Subcategory, error)
+	GetSubcategoryByID(ctx context.Context, subcategoryID string) (*models.Subcategory, error)
+	ValidateCategoryAndSubcategory(ctx context.Context, categoryIDOrSlug, subcategoryIDOrSlug string) (*models.Category, *models.Subcategory, error)
 }
 
 type categoryRepository struct {
@@ -121,6 +124,43 @@ func (r *categoryRepository) GetBySlug(ctx context.Context, slug string) (*model
 	return &cat, nil
 }
 
+// GetByID retrieves a single category by ID (or slug fallback)
+func (r *categoryRepository) GetByID(ctx context.Context, id string) (*models.Category, error) {
+	if r.db == nil || r.db.DB == nil {
+		return nil, ErrDatabaseUnavailable
+	}
+
+	query := `
+		SELECT id, name, slug, COALESCE(icon_name, ''), COALESCE(description, ''), 
+		       COALESCE(image, ''), is_active, sort_order, created_at, updated_at
+		FROM categories
+		WHERE (id = $1 OR slug = $1) AND is_active = TRUE;
+	`
+
+	var cat models.Category
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&cat.ID,
+		&cat.Name,
+		&cat.Slug,
+		&cat.IconName,
+		&cat.Description,
+		&cat.Image,
+		&cat.IsActive,
+		&cat.SortOrder,
+		&cat.CreatedAt,
+		&cat.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query category by id: %w", err)
+	}
+
+	return &cat, nil
+}
+
 // GetSubcategoriesByCategorySlug retrieves subcategories belonging to a category
 func (r *categoryRepository) GetSubcategoriesByCategorySlug(ctx context.Context, categorySlug string) ([]models.Subcategory, error) {
 	if r.db == nil || r.db.DB == nil {
@@ -166,4 +206,66 @@ func (r *categoryRepository) GetSubcategoriesByCategorySlug(ctx context.Context,
 	}
 
 	return subcategories, nil
+}
+
+// GetSubcategoryByID retrieves a subcategory by ID or slug
+func (r *categoryRepository) GetSubcategoryByID(ctx context.Context, subcategoryID string) (*models.Subcategory, error) {
+	if r.db == nil || r.db.DB == nil {
+		return nil, ErrDatabaseUnavailable
+	}
+
+	query := `
+		SELECT id, category_id, category_slug, name, slug, COALESCE(description, ''), 
+		       sort_order, is_active, created_at, updated_at
+		FROM subcategories
+		WHERE (id = $1 OR slug = $1) AND is_active = TRUE;
+	`
+
+	var sub models.Subcategory
+	err := r.db.QueryRowContext(ctx, query, subcategoryID).Scan(
+		&sub.ID,
+		&sub.CategoryID,
+		&sub.CategorySlug,
+		&sub.Name,
+		&sub.Slug,
+		&sub.Description,
+		&sub.SortOrder,
+		&sub.IsActive,
+		&sub.CreatedAt,
+		&sub.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query subcategory by id: %w", err)
+	}
+
+	return &sub, nil
+}
+
+// ValidateCategoryAndSubcategory verifies that both exist and that the subcategory belongs to the category
+func (r *categoryRepository) ValidateCategoryAndSubcategory(ctx context.Context, categoryIDOrSlug, subcategoryIDOrSlug string) (*models.Category, *models.Subcategory, error) {
+	cat, err := r.GetByID(ctx, categoryIDOrSlug)
+	if err != nil {
+		return nil, nil, err
+	}
+	if cat == nil {
+		return nil, nil, fmt.Errorf("category '%s' not found", categoryIDOrSlug)
+	}
+
+	sub, err := r.GetSubcategoryByID(ctx, subcategoryIDOrSlug)
+	if err != nil {
+		return nil, nil, err
+	}
+	if sub == nil {
+		return nil, nil, fmt.Errorf("subcategory '%s' not found", subcategoryIDOrSlug)
+	}
+
+	if sub.CategoryID != cat.ID && sub.CategorySlug != cat.Slug {
+		return nil, nil, fmt.Errorf("subcategory '%s' does not belong to category '%s'", sub.Name, cat.Name)
+	}
+
+	return cat, sub, nil
 }

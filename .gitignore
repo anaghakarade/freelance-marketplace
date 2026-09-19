@@ -36,3 +36,8 @@ backend/*.exe~
 backend/*.dll
 backend/*.so
 backend/*.dylib
+backend/pgdata/
+*.exe
+
+# Development-only test scripts
+backend/test_phase*.ps1

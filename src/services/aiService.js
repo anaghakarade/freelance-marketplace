@@ -71,8 +71,8 @@ export const aiService = {
 
   recommendServices: async (promptText) => {
     const reqs = await aiService.extractProjectRequirements(promptText);
-    const services = marketplaceService.getServices({ category: reqs.category });
-    return services.slice(0, 4);
+    const services = await marketplaceService.getServices({ category: reqs.category });
+    return (services || []).slice(0, 4);
   },
 
   recommendFreelancers: async (promptText) => {

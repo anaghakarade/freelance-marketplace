@@ -13,8 +13,9 @@ const Trending = () => {
     const groups = marketplaceService.getTrendingGroups();
     setTrendingGroups(groups);
 
-    const services = marketplaceService.getTrendingServices(8);
-    setTrendingServices(services);
+    marketplaceService.getTrendingServices(8)
+      .then(services => setTrendingServices(services || []))
+      .catch(err => console.error('[Trending] Failed to load trending services:', err));
   }, []);
 
   return (

@@ -90,3 +90,11 @@ The backend follows the **Layered Clean Architecture** pattern. This enforces st
 2. **Easy Testing**: Services and Repositories can be unit-tested or mocked independently.
 3. **Database Flexibility**: If storage logic changes, only the repository layer needs modification.
 4. **Clean Error Handling**: Database internals are never exposed to HTTP clients; errors are transformed into clean, safe API responses.
+
+---
+
+## Phase 8 review routes
+
+Contract reviews are handled by `ReviewHandler` → `ReviewRepository` (no extra service layer). Persistence of a new review plus `new_review` notification plus `review_created` activity uses `BeginTx` / `Commit` / `Rollback` in the repository, matching other transactional repositories.
+
+See `backend/README.md` (Phase 8) for request rules, trust formulas, and which metrics are calculated vs returned as `null`.

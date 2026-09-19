@@ -1,4 +1,5 @@
 import { orders as initialOrders } from '../data/orders';
+import { services as initialServices } from '../data/services';
 import { authService } from './authService';
 import { marketplaceService } from './marketplaceService';
 
@@ -15,7 +16,8 @@ export const orderService = {
 
   getOrdersForUser: (userId, role) => {
     const orders = orderService.getOrders();
-    const services = marketplaceService.getServices();
+    const rawServices = marketplaceService.getServices();
+    const services = Array.isArray(rawServices) ? rawServices : initialServices;
     const users = authService.getUsers();
 
     const filtered = orders.filter(ord => {
@@ -26,14 +28,14 @@ export const orderService = {
 
     // Hydrate each order with service and party details
     return filtered.map(ord => {
-      const srv = services.find(s => s.id === ord.serviceId);
+      const srv = services.find(s => s.id === ord.serviceId) || initialServices.find(s => s.id === ord.serviceId);
       const buyer = users.find(u => u.id === ord.buyerId);
       const seller = users.find(u => u.id === ord.sellerId);
 
       return {
         ...ord,
         serviceTitle: srv ? srv.title : 'Service Listing',
-        serviceImage: srv ? srv.image : '',
+        serviceImage: srv ? (srv.coverImage || srv.image) : '',
         buyerName: buyer ? buyer.name : 'Client',
         buyerAvatar: buyer ? buyer.avatar : '',
         sellerName: seller ? seller.name : 'Freelancer',
@@ -47,17 +49,18 @@ export const orderService = {
     const ord = orders.find(o => o.id === id);
     if (!ord) return null;
 
-    const services = marketplaceService.getServices();
+    const rawServices = marketplaceService.getServices();
+    const services = Array.isArray(rawServices) ? rawServices : initialServices;
     const users = authService.getUsers();
 
-    const srv = services.find(s => s.id === ord.serviceId);
+    const srv = services.find(s => s.id === ord.serviceId) || initialServices.find(s => s.id === ord.serviceId);
     const buyer = users.find(u => u.id === ord.buyerId);
     const seller = users.find(u => u.id === ord.sellerId);
 
     return {
       ...ord,
       serviceTitle: srv ? srv.title : 'Service Listing',
-      serviceImage: srv ? srv.image : '',
+      serviceImage: srv ? (srv.coverImage || srv.image) : '',
       serviceDescription: srv ? srv.description : '',
       buyerName: buyer ? buyer.name : 'Client',
       buyerEmail: buyer ? buyer.email : '',
@@ -68,8 +71,8 @@ export const orderService = {
     };
   },
 
-  createOrderRequest: (serviceId, packageKey = 'standard', selectedExtras = []) => {
-    const srv = marketplaceService.getServiceById(serviceId);
+  createOrderRequest: (serviceId, packageKey = 'standard', selectedExtras = [], serviceObj = null) => {
+    const srv = serviceObj || initialServices.find(s => s.id === serviceId) || { id: serviceId, startingPrice: 50, deliveryDays: 3 };
     if (!srv) throw new Error('Service not found.');
 
     const currentUser = authService.getCurrentUser();

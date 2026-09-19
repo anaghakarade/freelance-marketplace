@@ -49,7 +49,8 @@ export const userService = {
 
   getSellerProfile: async (userId) => {
     const profile = await userService.getProfile(userId);
-    const services = marketplaceService.getServices().filter(s => s.sellerId === userId);
+    const allServices = await marketplaceService.getServices();
+    const services = (allServices || []).filter(s => s.sellerId === userId);
     return {
       ...profile,
       services,
@@ -58,8 +59,9 @@ export const userService = {
     };
   },
 
-  getSellerServices: (userId) => {
-    return marketplaceService.getServices().filter(s => s.sellerId === userId);
+  getSellerServices: async (userId) => {
+    const allServices = await marketplaceService.getServices();
+    return (allServices || []).filter(s => s.sellerId === userId);
   },
 
   updateSkills: async (userId, skills = []) => {

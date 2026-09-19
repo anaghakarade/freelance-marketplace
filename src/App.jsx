@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/layout/ProtectedRoute';
@@ -10,6 +10,11 @@ import Home from './pages/public/Home';
 import Marketplace from './pages/marketplace/Marketplace';
 import ServiceDetails from './pages/marketplace/ServiceDetails';
 import SellerProfile from './pages/marketplace/SellerProfile';
+import ProjectsDiscovery from './pages/marketplace/ProjectsDiscovery';
+import ProjectDetails from './pages/marketplace/ProjectDetails';
+import FreelancersDiscovery from './pages/marketplace/FreelancersDiscovery';
+import ContractDetails from './pages/shared/ContractDetails';
+import Messages from './pages/shared/Messages';
 
 // Taxonomy & Discovery Pages
 import Categories from './pages/public/Categories';
@@ -29,8 +34,16 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 
 // Global Styles
 import './styles/global.css';
+import { authService } from './services/authService';
 
 function App() {
+  // Restore JWT session from backend on application load
+  useEffect(() => {
+    authService.restoreSession().catch(() => {
+      // Silently handle network errors on startup
+    });
+  }, []);
+
   return (
     <PreferenceProvider>
       <I18nProvider>
@@ -52,6 +65,15 @@ function App() {
 
           <Route path="service/:id" element={<ServiceDetails />} />
           <Route path="seller/:id" element={<SellerProfile />} />
+
+          {/* Phase 5: Project Marketplace Routes */}
+          <Route path="projects" element={<ProjectsDiscovery />} />
+          <Route path="freelancers" element={<FreelancersDiscovery />} />
+          <Route path="projects/:id" element={<ProjectDetails />} />
+
+          {/* Phase 6A: Contracts & Milestones Workspace */}
+          <Route path="contracts/:contractId" element={<ContractDetails />} />
+          <Route path="messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
           
           {/* Auth Pages */}
           <Route path="login" element={<Login />} />

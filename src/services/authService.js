@@ -16,7 +16,7 @@
 
 import { users as initialUsers } from '../data/users';
 import * as authApi from './api/authApi';
-import { setStoredToken } from './api/apiClient';
+import { setStoredToken, getStoredToken } from './api/apiClient';
 
 const USERS_KEY = 'workstream_users';
 const CURRENT_USER_KEY = 'workstream_current_user';
@@ -26,14 +26,11 @@ if (!localStorage.getItem(USERS_KEY)) {
   localStorage.setItem(USERS_KEY, JSON.stringify(initialUsers));
 }
 
-// Set default current user as the first user if not logged in (demo mode)
-if (!localStorage.getItem(CURRENT_USER_KEY)) {
-  const users = JSON.parse(localStorage.getItem(USERS_KEY));
-  const defaultUser = users.find(u => u.id === 'usr_1');
-  if (defaultUser) {
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(defaultUser));
-  }
-}
+// Listen for 401 Unauthorized from the API client — clear session without circular import
+window.addEventListener('authUnauthorized', () => {
+  localStorage.removeItem(CURRENT_USER_KEY);
+  window.dispatchEvent(new Event('authChange'));
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -227,9 +224,31 @@ export const authService = {
   },
 
   /**
-   * Get the current auth session (returns null for localStorage mode)
+   * Restore session from backend on application initialization.
+   * If a JWT token exists in localStorage, validate it with GET /api/auth/me.
+   * On success: stores the user profile and fires authChange.
+   * On failure (expired/invalid token): clears token and user silently.
+   *
+   * Call this once in App.jsx on mount.
    */
-  getSession: async () => {
+  restoreSession: async () => {
+    const token = getStoredToken();
+    if (!token) return null;
+
+    try {
+      const user = await authApi.getMe();
+      if (user) {
+        const sessionUser = { ...user, token };
+        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(sessionUser));
+        window.dispatchEvent(new Event('authChange'));
+        return sessionUser;
+      }
+    } catch (_err) {
+      // Token expired or backend unreachable — clear stored credentials
+      setStoredToken(null);
+      localStorage.removeItem(CURRENT_USER_KEY);
+      window.dispatchEvent(new Event('authChange'));
+    }
     return null;
   },
 

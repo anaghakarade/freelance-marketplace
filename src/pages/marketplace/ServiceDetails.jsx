@@ -8,7 +8,7 @@ import {
   ChevronDown, ChevronUp, CheckCircle, XCircle, Plus, Minus,
   Package, Zap, Award, Clock, Users, MessageSquare, Share2,
   Heart, ChevronRight, ChevronLeft, Play, ExternalLink,
-  ThumbsUp, Flag, BadgeCheck
+  ThumbsUp, Flag, BadgeCheck, AlertCircle
 } from 'lucide-react';
 
 // ─── Mock Review Data ──────────────────────────────────────────────────────
@@ -104,6 +104,7 @@ const ServiceDetails = () => {
 
   const [service, setService] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [activePackage, setActivePackage] = useState('standard');
   const [selectedExtras, setSelectedExtras] = useState([]);
   const [galleryIdx, setGalleryIdx] = useState(0);
@@ -114,11 +115,22 @@ const ServiceDetails = () => {
 
   const sidebarRef = useRef(null);
 
+  const fetchService = async () => {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const srv = await marketplaceService.getServiceById(id);
+      setService(srv);
+      setIsFav(srv?.isFavorite || false);
+    } catch (err) {
+      setFetchError(err.message || 'Failed to load service. Is the backend running?');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const srv = marketplaceService.getServiceById(id);
-    setService(srv);
-    setIsFav(srv?.isFavorite || false);
-    setLoading(false);
+    fetchService();
   }, [id]);
 
   if (loading) {
@@ -127,6 +139,29 @@ const ServiceDetails = () => {
         <div style={{ textAlign: 'center' }}>
           <div style={{ width: 40, height: 40, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 16px' }} />
           Loading service...
+        </div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: '0 24px' }}>
+        <AlertCircle size={40} style={{ color: '#ef4444' }} />
+        <h2 style={{ color: '#fff', margin: 0 }}>Unable to load service</h2>
+        <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', maxWidth: 480 }}>
+          {fetchError}
+        </p>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            onClick={fetchService}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 99, background: 'rgba(239,68,68,0.1)', color: '#ef4444', cursor: 'pointer', fontWeight: 600 }}
+          >
+            <RefreshCw size={14} /> Retry
+          </button>
+          <Link to="/marketplace" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', background: 'var(--color-accent)', color: '#fff', borderRadius: 99, fontWeight: 600, textDecoration: 'none' }}>
+            Back to Marketplace
+          </Link>
         </div>
       </div>
     );
@@ -180,7 +215,7 @@ const ServiceDetails = () => {
     setOrderLoading(true);
     setOrderError('');
     try {
-      const newOrder = orderService.createOrderRequest(service.id);
+      const newOrder = orderService.createOrderRequest(service.id, activePackage, selectedExtras, service);
       setTimeout(() => {
         navigate(`/buyer?tab=orders&orderId=${newOrder.id}&step=requirements`);
       }, 600);

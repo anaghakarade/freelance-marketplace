@@ -49,12 +49,12 @@ export const aiMatchingService = {
    */
   matchTalent: async (promptText = '') => {
     const analysis = await aiMatchingService.extractRequirements(promptText);
-    const services = marketplaceService.getServices({ category: analysis.recommendedCategory });
-    const categoryObj = marketplaceService.getCategoryBySlug(analysis.recommendedCategory);
+    const services = await marketplaceService.getServices({ category: analysis.recommendedCategory });
+    const categoryObj = await marketplaceService.getCategoryBySlug(analysis.recommendedCategory);
 
     return {
       analysis,
-      matchedServices: services.slice(0, 4),
+      matchedServices: (services || []).slice(0, 4),
       matchedCategory: categoryObj,
     };
   },

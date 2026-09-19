@@ -1,0 +1,5 @@
+import React, { useEffect, useState } from 'react';
+import { MessageSquare, Star } from 'lucide-react';
+import { communicationApi } from '../../services/api/communicationApi';
+
+export default function ActivityTimeline({ contractId }) { const [events,setEvents]=useState([]);useEffect(()=>{let live=true;communicationApi.activity('contract',contractId).then(d=>live&&setEvents(d.activity||[])).catch(()=>{});return()=>{live=false}},[contractId]);if(!events.length)return null;return <section style={{marginTop:24,padding:20,border:'1px solid var(--color-border)',borderRadius:14}}><h3 style={{marginTop:0}}>Activity</h3>{events.map(event=><div key={event.id} style={{display:'flex',gap:10,padding:'8px 0'}}>{event.action==='review_created'?<Star size={17} color="var(--color-accent)"/>:<MessageSquare size={17}/>}<div><strong>{event.action==='review_created'?'Review submitted':event.action.replace(/_/g,' ')}</strong><p style={{margin:'3px 0'}}>{event.description}</p><small>{new Date(event.createdAt).toLocaleString()}</small></div></div>)}</section> }

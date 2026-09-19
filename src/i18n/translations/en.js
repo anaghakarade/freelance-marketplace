@@ -92,5 +92,30 @@ export const en = {
     trustHeader: "Trust & Safety",
     resourcesHeader: "Resources",
     copyright: "WorkStream freelance marketplace. All rights reserved."
+  },
+  contracts: {
+    contracts: "Contracts",
+    contract: "Contract",
+    milestones: "Milestones",
+    milestone: "Milestone",
+    progress: "Progress",
+    approved: "Approved",
+    pending: "Pending",
+    inProgress: "In Progress",
+    submitted: "Submitted",
+    revisionRequested: "Revision Requested",
+    completed: "Completed",
+    cancelled: "Cancelled",
+    submitWork: "Submit Work",
+    approve: "Approve",
+    requestRevision: "Request Revision",
+    awaitingReview: "Awaiting Review",
+    startMilestone: "Start Milestone",
+    expectedCompletion: "Expected Completion",
+    agreedBudget: "Agreed Budget",
+    dueDate: "Due Date",
+    buyer: "Buyer",
+    freelancer: "Freelancer",
+    openWorkspace: "Open Workspace"
   }
 };

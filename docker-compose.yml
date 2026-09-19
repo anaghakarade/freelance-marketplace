@@ -1,0 +1,64 @@
+version: "3.8"
+
+services:
+  # ----------------------------------------------------------------------------
+  # PostgreSQL Database Service
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: workstream-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: workstream
+      POSTGRES_PASSWORD: workstream_secure_dev_password
+      POSTGRES_DB: workstream
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workstream -d workstream"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Database Migration Runner (Ephemeral)
+  # ----------------------------------------------------------------------------
+  migration:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: workstream-migration
+    entrypoint: ["/app/migrate", "up"]
+    environment:
+      DATABASE_URL: postgres://workstream:workstream_secure_dev_password@postgres:5432/workstream?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------------
+  # WorkStream Go Backend API
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: workstream-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ENVIRONMENT: production
+      PORT: "8080"
+      DATABASE_URL: postgres://workstream:workstream_secure_dev_password@postgres:5432/workstream?sslmode=disable
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000,http://localhost:80"
+      JWT_SECRET: "workstream-production-deploy-secret-token-key-32bytes"
+      JWT_EXPIRATION_HOURS: "24"
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+    driver: local

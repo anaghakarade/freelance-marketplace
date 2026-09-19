@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { authService } from '../../services/authService';
 import { orderService } from '../../services/orderService';
+import { projectApi } from '../../services/api/projectApi';
+import { contractApi } from '../../services/api/contractApi';
 import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
-import { LayoutDashboard, FileText, Mail, ShoppingCart, CheckCircle, Clock, ChevronDown, ChevronUp, Sparkles, HeartHandshake, ShieldCheck, PlusCircle } from 'lucide-react';
+import DashboardSidebar from '../../components/dashboard/DashboardSidebar';
+import { LayoutDashboard, FileText, Mail, ShoppingCart, CheckCircle, Clock, ChevronDown, ChevronUp, Sparkles, HeartHandshake, ShieldCheck, PlusCircle, Briefcase, ThumbsUp, X, Check, ExternalLink, Layers, Users } from 'lucide-react';
 
 const ORDER_STEPS = [
   { status: 'pending', label: 'Order Placed' },
@@ -56,6 +59,12 @@ export default function BuyerDashboard() {
   const urlStep = searchParams.get('step');
 
   const [currentUser, setCurrentUser] = useState(authService.getCurrentUser());
+
+  useEffect(() => {
+    const handleAuth = () => setCurrentUser(authService.getCurrentUser());
+    window.addEventListener('authChange', handleAuth);
+    return () => window.removeEventListener('authChange', handleAuth);
+  }, []);
   const [orders, setOrders] = useState([]);
   const [selectedOrderForRequirements, setSelectedOrderForRequirements] = useState(null);
   const [requirementsData, setRequirementsData] = useState({});
@@ -68,10 +77,97 @@ export default function BuyerDashboard() {
   const [giveBackModalOrder, setGiveBackModalOrder] = useState(null);
   const [giveBackPercent, setGiveBackPercent] = useState('1');
 
+  // Buyer Projects & Proposals State (Phase 5)
+  const [myProjects, setMyProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [selectedProjectForProposals, setSelectedProjectForProposals] = useState(null);
+  const [projectProposals, setProjectProposals] = useState([]);
+  const [loadingProposals, setLoadingProposals] = useState(false);
+  const [decisionFeedback, setDecisionFeedback] = useState(null);
+
+  // Contracts State (Phase 6A)
+  const [myContracts, setMyContracts] = useState([]);
+  const [loadingContracts, setLoadingContracts] = useState(false);
+
+  const fetchMyContracts = async () => {
+    setLoadingContracts(true);
+    try {
+      const contracts = await contractApi.getMyContracts();
+      setMyContracts(contracts || []);
+    } catch (err) {
+      console.error('[BuyerDashboard] Failed to load contracts:', err);
+    } finally {
+      setLoadingContracts(false);
+    }
+  };
+
+  const fetchMyProjects = async () => {
+    setLoadingProjects(true);
+    try {
+      const projs = await projectApi.getMyProjects();
+      setMyProjects(projs || []);
+    } catch (err) {
+      console.error('[BuyerDashboard] Failed to load projects:', err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const handleOpenProposals = async (proj) => {
+    setSelectedProjectForProposals(proj);
+    setLoadingProposals(true);
+    setDecisionFeedback(null);
+    try {
+      const props = await projectApi.getProjectProposals(proj.id);
+      setProjectProposals(props || []);
+    } catch (err) {
+      console.error('[BuyerDashboard] Failed to load proposals:', err);
+      setProjectProposals([]);
+    } finally {
+      setLoadingProposals(false);
+    }
+  };
+
+  const handleProposalDecision = async (proposalId, action) => {
+    try {
+      if (action === 'shortlist') {
+        await projectApi.shortlistProposal(proposalId);
+        setDecisionFeedback({ type: 'success', text: 'Proposal marked as shortlisted.' });
+      } else if (action === 'reject') {
+        await projectApi.rejectProposal(proposalId);
+        setDecisionFeedback({ type: 'info', text: 'Proposal rejected.' });
+      } else if (action === 'accept') {
+        const result = await projectApi.acceptProposal(proposalId);
+        const contractId = result?.data?.contractId || result?.contractId;
+        if (contractId) {
+          setDecisionFeedback({ type: 'success', text: `Proposal accepted! Contract created. Opening workspace...` });
+          fetchMyProjects();
+          fetchMyContracts();
+          setTimeout(() => navigate(`/contracts/${contractId}`), 800);
+        } else {
+          setDecisionFeedback({ type: 'success', text: 'Proposal accepted! Project is now in progress.' });
+          fetchMyProjects();
+          fetchMyContracts();
+        }
+      }
+
+      // Refresh proposal list
+      if (selectedProjectForProposals) {
+        const updated = await projectApi.getProjectProposals(selectedProjectForProposals.id);
+        setProjectProposals(updated || []);
+      }
+    } catch (err) {
+      setDecisionFeedback({ type: 'error', text: err.message || 'Action failed.' });
+    }
+  };
+
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'buyer') { navigate('/login'); return; }
     const ordList = orderService.getOrdersForUser(currentUser.id, 'buyer');
     setOrders(ordList);
+    fetchMyProjects();
+    fetchMyContracts();
+
     if (urlOrderId) {
       const order = orderService.getOrderById(urlOrderId);
       if (order && urlStep === 'requirements') {
@@ -137,10 +233,30 @@ export default function BuyerDashboard() {
     setSelectedOrderChat(orderService.getOrderById(selectedOrderChat.id));
   };
 
-  const navItems = [
-    { id: 'dashboard', icon: LayoutDashboard, label: 'Overview' },
-    { id: 'orders', icon: FileText, label: 'My Orders' },
-    { id: 'messages', icon: Mail, label: 'Messages' },
+  const activeOrdersCount = orders.filter(o => ['active', 'requirements_submitted', 'delivered', 'pending'].includes(o.status)).length;
+  const activeContractsCount = myContracts.filter(c => c.status === 'active' || c.status === 'in_progress').length;
+
+  const sidebarSections = [
+    {
+      items: [
+        { id: 'dashboard', icon: LayoutDashboard, label: 'Overview' },
+        { id: 'projects', icon: Briefcase, label: 'My Projects', badge: myProjects.length > 0 ? myProjects.length : undefined },
+        { id: 'contracts', icon: Layers, label: 'Contracts', badge: activeContractsCount || (myContracts.length > 0 ? myContracts.length : undefined) },
+        { id: 'orders', icon: FileText, label: 'My Orders', badge: activeOrdersCount > 0 ? activeOrdersCount : undefined, badgeType: 'accent' },
+        { id: 'messages', icon: Mail, label: 'Messages' },
+      ]
+    },
+    {
+      items: [
+        {
+          id: 'post-project-action',
+          icon: PlusCircle,
+          label: '+ Post Outcome Goal',
+          isAction: true,
+          onClick: () => navigate('/post-project')
+        }
+      ]
+    }
   ];
 
   return (
@@ -202,32 +318,33 @@ export default function BuyerDashboard() {
         </div>
       )}
 
-      {/* SIDEBAR */}
-      <aside className="dashboard-sidebar">
-        <div className="sidebar-user">
-          <Avatar src={currentUser.avatar} name={currentUser.name} size={38} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 'var(--weight-semibold)', fontSize: 'var(--text-sm)', color: 'var(--color-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.name}</div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', fontWeight: 'var(--weight-medium)' }}>
-              {currentUser.accountType === 'corporate' ? 'Corporate Buyer' : 'Buyer'}
+      {/* DASHBOARD SIDEBAR */}
+      <DashboardSidebar
+        user={currentUser}
+        role="buyer"
+        roleBadge={currentUser?.accountType === 'corporate' ? 'Corporate Buyer' : 'Verified Buyer'}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        sections={sidebarSections}
+        footerWidget={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+              <span className="sidebar-live-dot" />
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#38bdf8' }}>Verified Buyer</span>
             </div>
+            <span style={{ fontSize: '0.74rem', color: 'var(--sidebar-text-sub)' }}>
+              {orders.length} orders
+            </span>
           </div>
-        </div>
-
-        {navItems.map(({ id, icon: Icon, label }) => (
-          <button key={id} className={`sidebar-link ${activeTab === id ? 'sidebar-link-active' : ''}`} onClick={() => handleTabChange(id)}>
-            <Icon size={16} /> {label}
-          </button>
-        ))}
-
-        <button className="sidebar-link" onClick={() => navigate('/post-project')} style={{ color: 'var(--color-accent)' }}>
-          <PlusCircle size={16} /> Post Outcome Goal
-        </button>
-
-        <button className="sidebar-link" onClick={() => navigate('/marketplace')}>
-          <ShoppingCart size={16} /> Browse Marketplace
-        </button>
-      </aside>
+        }
+        extraBottomActions={[
+          {
+            icon: ShoppingCart,
+            label: 'Marketplace',
+            onClick: () => navigate('/marketplace')
+          }
+        ]}
+      />
 
       <main className="dashboard-content">
 
@@ -275,6 +392,365 @@ export default function BuyerDashboard() {
                 <Button variant="primary" onClick={() => navigate('/marketplace')}>Browse Services</Button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ======== MY PROJECTS (PHASE 5) ======== */}
+        {activeTab === 'projects' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <h2 style={{ margin: 0 }}>My Posted Projects</h2>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', marginTop: '4px' }}>
+                  Manage project briefs, review candidate proposals, and track delivery progress.
+                </p>
+              </div>
+              <Button variant="primary" onClick={() => navigate('/post-project')} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <PlusCircle size={16} />
+                <span>Post New Project</span>
+              </Button>
+            </div>
+
+            {loadingProjects ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--color-text-light)' }}>
+                <div className="spinner" style={{ margin: '0 auto 16px' }} />
+                <p>Loading your projects...</p>
+              </div>
+            ) : myProjects.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 'var(--space-2xl)', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 'var(--radius-lg)', color: 'var(--color-text-light)', background: 'rgba(15,23,42,0.3)' }}>
+                <Briefcase size={36} color="var(--color-accent)" style={{ margin: '0 auto 16px' }} />
+                <h3 style={{ fontSize: '1.2rem', color: '#fff', marginBottom: '8px' }}>No projects posted yet</h3>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', maxWidth: '420px', margin: '0 auto 20px' }}>
+                  Define your goals, budget, and skills to receive tailored bids from verified top-tier freelancers.
+                </p>
+                <Button variant="primary" onClick={() => navigate('/post-project')}>
+                  Post Your First Project
+                </Button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {myProjects.map((p) => {
+                  const statusColors = {
+                    open: 'var(--color-accent)',
+                    in_progress: '#3b82f6',
+                    completed: '#a78bfa',
+                    cancelled: '#ef4444',
+                    closed: 'var(--color-text-muted)',
+                  };
+                  const color = statusColors[p.status] || 'var(--color-accent)';
+
+                  const formattedBudget =
+                    p.budgetType === 'fixed'
+                      ? p.fixedBudget
+                        ? `$${p.fixedBudget}`
+                        : p.budgetMin && p.budgetMax
+                        ? `$${p.budgetMin} – $${p.budgetMax}`
+                        : `$${p.budgetMin || p.budgetMax || 'Negotiable'}`
+                      : `$${p.budgetMin || 0} – $${p.budgetMax || 0}/hr`;
+
+                  return (
+                    <div
+                      key={p.id}
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.55)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 14,
+                        padding: '22px 24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 14,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-accent)' }}>
+                              {p.categoryName || 'Project'}
+                            </span>
+                            <span style={{ padding: '2px 8px', borderRadius: 99, background: `${color}18`, border: `1px solid ${color}40`, fontSize: '0.72rem', fontWeight: 700, color: color, textTransform: 'uppercase' }}>
+                              {p.status === 'in_progress' ? 'In Progress' : p.status}
+                            </span>
+                          </div>
+                          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff', margin: 0 }}>
+                            {p.title}
+                          </h3>
+                        </div>
+
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-accent)' }}>
+                            {formattedBudget}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>
+                            {p.budgetType} Budget
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Skills */}
+                      {p.skills && p.skills.length > 0 && (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {p.skills.map((s, idx) => (
+                            <span key={idx} style={{ fontSize: '0.75rem', padding: '3px 8px', background: 'rgba(255,255,255,0.04)', borderRadius: 6, color: 'var(--color-text-light)' }}>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Footer Actions */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', display: 'flex', gap: 16 }}>
+                          <span><strong>{p.proposalCount}</strong> Proposals Received</span>
+                          <span>Timeline: <strong>{p.estimatedDuration}</strong></span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleOpenProposals(p)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                          >
+                            <Users size={14} />
+                            <span>Review Proposals ({p.proposalCount})</span>
+                          </Button>
+                          <Link
+                            to={`/projects/${p.id}`}
+                            className="btn btn-outline btn-sm"
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}
+                          >
+                            <Sparkles size={13} style={{ color: 'var(--color-accent)' }} />
+                            <span>Matched Talent & Brief</span>
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PROPOSALS REVIEW MODAL (BUYER) */}
+        {selectedProjectForProposals && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 9999,
+              background: 'rgba(9, 13, 22, 0.88)',
+              backdropFilter: 'blur(12px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20,
+            }}
+          >
+            <div
+              style={{
+                background: 'rgba(15, 23, 42, 0.98)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                borderRadius: 20,
+                padding: 28,
+                maxWidth: 820,
+                width: '100%',
+                color: '#fff',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-accent)', fontWeight: 700, fontSize: '0.85rem', marginBottom: 4 }}>
+                    <Sparkles size={16} />
+                    <span>Candidate Proposals & Match Scoring</span>
+                  </div>
+                  <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0 }}>
+                    {selectedProjectForProposals.title}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setSelectedProjectForProposals(null)}
+                  style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: '1.5rem', cursor: 'pointer' }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {decisionFeedback && (
+                <div
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    marginBottom: 16,
+                    fontSize: '0.88rem',
+                    background: decisionFeedback.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                    border: `1px solid ${decisionFeedback.type === 'success' ? 'var(--color-accent)' : '#ef4444'}`,
+                    color: decisionFeedback.type === 'success' ? 'var(--color-accent)' : '#fca5a5',
+                  }}
+                >
+                  {decisionFeedback.text}
+                </div>
+              )}
+
+              {/* Proposals List Scrollable */}
+              <div style={{ flex: 1, overflowY: 'auto', paddingRight: 6, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {loadingProposals ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                    <div className="spinner" style={{ margin: '0 auto 12px' }} />
+                    <p>Evaluating candidate proposals...</p>
+                  </div>
+                ) : projectProposals.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-muted)' }}>
+                    No proposals submitted yet for this project.
+                  </div>
+                ) : (
+                  projectProposals.map((prop) => {
+                    const statusBg = {
+                      accepted: 'rgba(16, 185, 129, 0.2)',
+                      shortlisted: 'rgba(59, 130, 246, 0.2)',
+                      pending: 'rgba(245, 158, 11, 0.2)',
+                      rejected: 'rgba(239, 68, 68, 0.2)',
+                      withdrawn: 'rgba(255, 255, 255, 0.08)',
+                    }[prop.status] || 'rgba(255, 255, 255, 0.08)';
+
+                    const statusColor = {
+                      accepted: 'var(--color-accent)',
+                      shortlisted: '#60a5fa',
+                      pending: '#fbbf24',
+                      rejected: '#f87171',
+                      withdrawn: 'var(--color-text-muted)',
+                    }[prop.status] || '#fff';
+
+                    return (
+                      <div
+                        key={prop.id}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          border: prop.status === 'accepted' ? '2px solid var(--color-accent)' : '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: 14,
+                          padding: 20,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 12,
+                        }}
+                      >
+                        {/* Freelancer Profile & Match Score */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <Avatar src={prop.freelancer?.avatar} name={prop.freelancer?.name || 'Freelancer'} size={46} />
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '1rem', color: '#fff' }}>
+                                {prop.freelancer?.name || 'Candidate'}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                {prop.freelancer?.title || 'Freelancer'} • {prop.freelancer?.location || 'Global'}
+                              </div>
+                              {prop.freelancer?.rating > 0 && (
+                                <div style={{ fontSize: '0.78rem', color: '#f59e0b', marginTop: 2 }}>
+                                  ★ {prop.freelancer.rating.toFixed(1)} ({prop.freelancer.reviewsCount} reviews)
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* WorkStream Match Score Badge */}
+                          <div style={{ textAlign: 'right' }}>
+                            {prop.matchScore > 0 && (
+                              <div
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  padding: '4px 12px',
+                                  borderRadius: 999,
+                                  background: 'rgba(16, 185, 129, 0.15)',
+                                  border: '1px solid var(--color-accent)',
+                                  color: 'var(--color-accent)',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 800,
+                                  marginBottom: 4,
+                                }}
+                              >
+                                <Sparkles size={13} />
+                                <span>{prop.matchScore}% Match</span>
+                              </div>
+                            )}
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', maxWidth: 220 }}>
+                              {prop.matchRationale}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bid details */}
+                        <div style={{ display: 'flex', gap: 20, padding: '10px 14px', background: 'rgba(0,0,0,0.2)', borderRadius: 8, fontSize: '0.88rem' }}>
+                          <div>
+                            <span style={{ color: 'var(--color-text-muted)' }}>Proposed Bid: </span>
+                            <strong style={{ color: 'var(--color-accent)' }}>${prop.bidAmount}</strong>
+                          </div>
+                          <div>
+                            <span style={{ color: 'var(--color-text-muted)' }}>Delivery Timeline: </span>
+                            <strong>{prop.deliveryDays} days ({prop.estimatedDuration})</strong>
+                          </div>
+                          <div style={{ marginLeft: 'auto' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: 99, background: statusBg, color: statusColor, fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                              {prop.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Cover Letter */}
+                        <div style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', lineHeight: 1.6, background: 'rgba(255,255,255,0.02)', padding: '12px 14px', borderRadius: 8 }}>
+                          {prop.coverLetter}
+                        </div>
+
+                        {/* Actions */}
+                        {selectedProjectForProposals.status === 'open' && prop.status !== 'accepted' && prop.status !== 'rejected' && prop.status !== 'withdrawn' && (
+                          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 6 }}>
+                            {prop.status !== 'shortlisted' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleProposalDecision(prop.id, 'shortlist')}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                              >
+                                <ThumbsUp size={13} />
+                                <span>Shortlist</span>
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleProposalDecision(prop.id, 'reject')}
+                              style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f87171' }}
+                            >
+                              <X size={13} />
+                              <span>Reject</span>
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => {
+                                if (window.confirm(`Accept proposal from ${prop.freelancer?.name || 'this freelancer'} for $${prop.bidAmount}? This will award the contract and close competing proposals.`)) {
+                                  handleProposalDecision(prop.id, 'accept');
+                                }
+                              }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                            >
+                              <Check size={13} />
+                              <span>Accept & Award Contract</span>
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -456,6 +932,116 @@ export default function BuyerDashboard() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ======== CONTRACTS (PHASE 6A) ======== */}
+        {activeTab === 'contracts' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <h2 style={{ margin: 0 }}>Active Contracts</h2>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', marginTop: '4px' }}>
+                  Track progress, review milestone submissions, and approve deliverables.
+                </p>
+              </div>
+            </div>
+
+            {loadingContracts ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--color-text-light)' }}>
+                <div className="spinner" style={{ margin: '0 auto 16px' }} />
+                <p>Loading your contracts...</p>
+              </div>
+            ) : myContracts.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 'var(--space-2xl)', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 'var(--radius-lg)', color: 'var(--color-text-light)', background: 'rgba(15,23,42,0.3)' }}>
+                <Layers size={36} color="var(--color-accent)" style={{ margin: '0 auto 16px' }} />
+                <h3 style={{ fontSize: '1.2rem', color: '#fff', marginBottom: '8px' }}>No active contracts yet</h3>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', maxWidth: '420px', margin: '0 auto 20px' }}>
+                  Contracts are created automatically when you accept a freelancer's proposal on one of your projects.
+                </p>
+                <Button variant="primary" onClick={() => handleTabChange('projects')}>View My Projects</Button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {myContracts.map((c) => {
+                  const statusColors = {
+                    active: { bg: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.3)', color: '#60a5fa' },
+                    completed: { bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)', color: 'var(--color-accent)' },
+                    cancelled: { bg: 'rgba(239, 68, 68, 0.12)', border: 'rgba(239, 68, 68, 0.3)', color: '#f87171' },
+                    disputed: { bg: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24' },
+                  };
+                  const sc = statusColors[c.status] || statusColors.active;
+                  const progressPct = c.progress?.progressPercentage ?? 0;
+
+                  return (
+                    <div
+                      key={c.id}
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.55)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: 16,
+                        padding: 24,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 16,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-accent)' }}>Contract</span>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: 999,
+                              background: sc.bg,
+                              border: `1px solid ${sc.border}`,
+                              color: sc.color,
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                            }}>{c.status}</span>
+                          </div>
+                          <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#fff', marginBottom: 4 }}>{c.title}</div>
+                          <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                            Freelancer: <strong style={{ color: '#fff' }}>{c.freelancer?.name || 'Freelancer'}</strong>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-accent)' }}>${c.agreedBudget}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{c.currency || 'USD'}</div>
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '0.8rem' }}>
+                          <span style={{ color: 'var(--color-text-muted)' }}>Milestone Progress</span>
+                          <span style={{ color: 'var(--color-accent)', fontWeight: 700 }}>{progressPct}%</span>
+                        </div>
+                        <div style={{ height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 999, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${progressPct}%`, background: 'linear-gradient(90deg,#10b981,#34d399)', borderRadius: 999, transition: 'width 0.3s ease' }} />
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: 4 }}>
+                          {c.progress?.approvedMilestones ?? 0} / {c.progress?.totalMilestones ?? 0} milestones approved
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/contracts/${c.id}`)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <ExternalLink size={13} />
+                          <span>Open Workspace</span>
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

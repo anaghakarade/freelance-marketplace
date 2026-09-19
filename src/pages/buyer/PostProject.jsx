@@ -5,6 +5,8 @@ import { marketplaceService } from '../../services/marketplaceService';
 import { authService } from '../../services/authService';
 import ServiceCard from '../../components/ui/ServiceCard';
 
+import { projectApi } from '../../services/api/projectApi';
+
 const OUTCOME_OPTIONS = [
   { id: 'build', label: 'Build Something', desc: 'Websites, mobile apps, custom software, digital tools', catSlug: 'programming-tech' },
   { id: 'grow', label: 'Grow Something', desc: 'SEO, performance marketing, audience growth, conversion strategy', catSlug: 'digital-marketing' },
@@ -18,13 +20,15 @@ export default function PostProject() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(authService.getCurrentUser());
   const [categories, setCategories] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   
   const [formData, setFormData] = useState({
     outcomeGoal: 'Build Something',
     title: '',
     description: '',
     budget: '400',
-    deadline: '7',
+    deadline: '14',
     skills: 'React, Figma',
     categoryId: 'cat_2'
   });
@@ -34,7 +38,9 @@ export default function PostProject() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    setCategories(marketplaceService.getCategories());
+    marketplaceService.getCategories()
+      .then(cats => setCategories(cats || []))
+      .catch(err => console.error('[PostProject] Failed to load categories:', err));
   }, []);
 
   const handleOutcomeSelect = (opt) => {
@@ -46,35 +52,67 @@ export default function PostProject() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.title.trim() || !formData.description.trim()) {
-      alert('Please enter a project title and description.');
+    setSubmitError(null);
+
+    if (!currentUser) {
+      navigate('/login?redirect=/post-project');
       return;
     }
 
-    const project = marketplaceService.createProjectPost({
-      ...formData,
-      buyerId: currentUser ? currentUser.id : 'usr_6'
-    });
+    if (currentUser.role !== 'buyer' && currentUser.role !== 'client' && currentUser.role !== 'admin') {
+      setSubmitError('Only buyer accounts can post projects. Please switch to a buyer profile or register a buyer account.');
+      return;
+    }
 
-    setSubmittedProject(project);
+    if (!formData.title.trim() || formData.title.trim().length < 10) {
+      setSubmitError('Project title must be at least 10 characters.');
+      return;
+    }
 
-    // Compute WorkStream Match across all marketplace services
-    const services = marketplaceService.getServices();
-    const scored = services.map(srv => {
-      const match = marketplaceService.calculateWorkStreamMatch(project, srv);
-      return {
-        ...srv,
-        matchScore: match.totalScore,
-        matchBreakdown: match.breakdown,
-        matchRationale: match.rationale
-      };
-    });
+    if (!formData.description.trim() || formData.description.trim().length < 50) {
+      setSubmitError('Project description must be at least 50 characters with detailed scope.');
+      return;
+    }
 
-    // Sort by highest match score
-    scored.sort((a, b) => b.matchScore - a.matchScore);
-    setMatchedResults(scored.slice(0, 6));
+    setSubmitting(true);
+
+    try {
+      // 1. Post to PostgreSQL Backend API
+      const newProj = await projectApi.createProject({
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        category_id: formData.categoryId,
+        budget_type: 'fixed',
+        fixed_budget: parseFloat(formData.budget) || 400,
+        skills_string: formData.skills,
+        estimated_duration: `${formData.deadline} days`,
+        experience_level: 'intermediate',
+      });
+
+      setSubmittedProject(newProj);
+
+      // 2. Also calculate WorkStream Match recommendations
+      const services = await marketplaceService.getServices();
+      const scored = (services || []).map(srv => {
+        const match = marketplaceService.calculateWorkStreamMatch(newProj, srv);
+        return {
+          ...srv,
+          matchScore: match.totalScore,
+          matchBreakdown: match.breakdown,
+          matchRationale: match.rationale
+        };
+      });
+
+      scored.sort((a, b) => b.matchScore - a.matchScore);
+      setMatchedResults(scored.slice(0, 6));
+    } catch (err) {
+      console.error('[PostProject] Creation error:', err);
+      setSubmitError(err.message || 'Failed to post project. Please verify inputs.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -207,12 +245,19 @@ export default function PostProject() {
               </div>
             </div>
 
+            {submitError && (
+              <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', color: '#fca5a5', fontSize: '0.9rem', marginBottom: '20px' }}>
+                {submitError}
+              </div>
+            )}
+
             <button
               type="submit"
+              disabled={submitting}
               className="btn btn-primary btn-md"
               style={{ width: '100%', padding: '16px', borderRadius: '12px', fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             >
-              <span>Calculate WorkStream Match & Find Talent</span>
+              <span>{submitting ? 'Publishing Project...' : 'Publish Project & Find Talent'}</span>
               <ArrowRight size={18} />
             </button>
 
@@ -224,23 +269,39 @@ export default function PostProject() {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-accent)', fontWeight: 700, fontSize: '0.9rem', marginBottom: '4px' }}>
                   <CheckCircle2 size={18} />
-                  <span>Project Brief Submitted</span>
+                  <span>Project Published to Live Marketplace!</span>
                 </div>
                 <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', margin: 0 }}>
                   {submittedProject.title}
                 </h2>
                 <div style={{ fontSize: '0.88rem', color: 'var(--color-text-light)', marginTop: '4px' }}>
-                  Goal: {submittedProject.outcomeGoal} • Budget: ${submittedProject.budget} • Timeline: {submittedProject.deadlineDays} days
+                  Budget: ${submittedProject.fixedBudget || submittedProject.budgetMin || submittedProject.budget} • Status: <strong style={{ color: 'var(--color-accent)' }}>Live / Open</strong>
                 </div>
               </div>
 
-              <button
-                onClick={() => setSubmittedProject(null)}
-                className="btn btn-outline btn-md"
-                style={{ borderRadius: '10px' }}
-              >
-                Post Another Project
-              </button>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <Link
+                  to={`/projects/${submittedProject.id}`}
+                  className="btn btn-primary btn-md"
+                  style={{ borderRadius: '10px' }}
+                >
+                  View Live Brief
+                </Link>
+                <Link
+                  to="/buyer?tab=projects"
+                  className="btn btn-outline btn-md"
+                  style={{ borderRadius: '10px' }}
+                >
+                  My Projects Dashboard
+                </Link>
+                <button
+                  onClick={() => setSubmittedProject(null)}
+                  className="btn btn-outline btn-md"
+                  style={{ borderRadius: '10px' }}
+                >
+                  Post Another
+                </button>
+              </div>
             </div>
 
             <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#fff', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -1,10 +1,17 @@
 import { authService } from './authService';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { communicationApi } from './api/communicationApi';
 
 const NOTIFICATIONS_KEY = 'workstream_notifications';
 
 export const notificationService = {
   getNotifications: async (userId) => {
+    try {
+      const data = await communicationApi.notifications();
+      return data.notifications || [];
+    } catch (error) {
+      // Keep the existing offline/demo fallback available when the API is unavailable.
+    }
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase
         .from('notifications')
@@ -42,11 +49,23 @@ export const notificationService = {
   },
 
   getUnreadCount: async (userId) => {
+    try {
+      const data = await communicationApi.notifications();
+      return data.unread_count || 0;
+    } catch (error) {
+      // fall through to offline data
+    }
     const list = await notificationService.getNotifications(userId);
     return list.filter(n => !n.isRead).length;
   },
 
   markAsRead: async (notificationId) => {
+    try {
+      await communicationApi.markNotificationRead(notificationId);
+      return true;
+    } catch (error) {
+      // fall through to the legacy offline store
+    }
     if (isSupabaseConfigured && supabase) {
       await supabase
         .from('notifications')

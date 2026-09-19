@@ -14,7 +14,10 @@ import (
 type mockCategoryRepository struct {
 	getAllFunc                         func(ctx context.Context) ([]models.Category, error)
 	getBySlugFunc                      func(ctx context.Context, slug string) (*models.Category, error)
+	getByIDFunc                        func(ctx context.Context, id string) (*models.Category, error)
 	getSubcategoriesByCategorySlugFunc func(ctx context.Context, categorySlug string) ([]models.Subcategory, error)
+	getSubcategoryByIDFunc             func(ctx context.Context, subcategoryID string) (*models.Subcategory, error)
+	validateFunc                       func(ctx context.Context, categoryIDOrSlug, subcategoryIDOrSlug string) (*models.Category, *models.Subcategory, error)
 }
 
 func (m *mockCategoryRepository) GetAll(ctx context.Context) ([]models.Category, error) {
@@ -31,11 +34,33 @@ func (m *mockCategoryRepository) GetBySlug(ctx context.Context, slug string) (*m
 	return nil, nil
 }
 
+func (m *mockCategoryRepository) GetByID(ctx context.Context, id string) (*models.Category, error) {
+	if m.getByIDFunc != nil {
+		return m.getByIDFunc(ctx, id)
+	}
+	return nil, nil
+}
+
 func (m *mockCategoryRepository) GetSubcategoriesByCategorySlug(ctx context.Context, categorySlug string) ([]models.Subcategory, error) {
 	if m.getSubcategoriesByCategorySlugFunc != nil {
 		return m.getSubcategoriesByCategorySlugFunc(ctx, categorySlug)
 	}
 	return nil, nil
+}
+
+func (m *mockCategoryRepository) GetSubcategoryByID(ctx context.Context, subcategoryID string) (*models.Subcategory, error) {
+	if m.getSubcategoryByIDFunc != nil {
+		return m.getSubcategoryByIDFunc(ctx, subcategoryID)
+	}
+	return nil, nil
+}
+
+func (m *mockCategoryRepository) ValidateCategoryAndSubcategory(ctx context.Context, categoryIDOrSlug, subcategoryIDOrSlug string) (*models.Category, *models.Subcategory, error) {
+	if m.validateFunc != nil {
+		return m.validateFunc(ctx, categoryIDOrSlug, subcategoryIDOrSlug)
+	}
+	return &models.Category{ID: "cat_2", Name: "Programming", Slug: "programming-tech"},
+		&models.Subcategory{ID: "sub_2_1", CategoryID: "cat_2", Name: "Web Development", Slug: "web-development"}, nil
 }
 
 func TestCategoryService_GetAllCategories(t *testing.T) {

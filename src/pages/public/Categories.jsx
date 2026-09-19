@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { marketplaceService } from '../../services/marketplaceService';
 import Breadcrumbs from '../../components/ui/Breadcrumbs';
-import { Search, ArrowRight, Layers, Grid } from 'lucide-react';
+import { Search, ArrowRight, Layers, Grid, AlertCircle, RefreshCw } from 'lucide-react';
 import { useTranslation } from '../../i18n/i18n';
 import CategoryScene from '../../components/3d/CategoryScene';
 
@@ -11,24 +11,46 @@ const Categories = () => {
   const [categories, setCategories] = useState([]);
   const [subcategoriesMap, setSubcategoriesMap] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const cats = await marketplaceService.getCategories();
+      setCategories(cats || []);
+
+      const map = {};
+      await Promise.all(
+        (cats || []).map(async (c) => {
+          try {
+            const subs = await marketplaceService.getSubcategories(c.slug || c.id);
+            map[c.id] = subs || [];
+          } catch {
+            map[c.id] = [];
+          }
+        })
+      );
+      setSubcategoriesMap(map);
+    } catch (err) {
+      console.error('[Categories] Error loading categories from API:', err);
+      setError(err.message || 'Unable to load categories. Please check that the WorkStream backend is running.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const cats = marketplaceService.getCategories();
-    setCategories(cats);
-
-    const map = {};
-    cats.forEach(c => {
-      map[c.id] = marketplaceService.getSubcategories(c.slug || c.id);
-    });
-    setSubcategoriesMap(map);
-  }, []);
+    loadData();
+  }, [loadData]);
 
   const filteredCategories = categories.filter(cat => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
-    const catMatch = cat.name.toLowerCase().includes(q) || cat.description.toLowerCase().includes(q);
+    const catMatch = (cat.name || '').toLowerCase().includes(q) || (cat.description || '').toLowerCase().includes(q);
     const subs = subcategoriesMap[cat.id] || [];
-    const subMatch = subs.some(s => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
+    const subMatch = subs.some(s => (s.name || '').toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q));
     return catMatch || subMatch;
   });
 
@@ -68,10 +90,46 @@ const Categories = () => {
           </div>
         </div>
 
-        {/* Categories Grid */}
-        {filteredCategories.length > 0 ? (
+        {/* Categories Grid, Loading, or Error */}
+        {loading ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 'var(--space-xl)' }}>
-            {filteredCategories.map((cat, idx) => {
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={idx}
+                style={{
+                  height: '340px',
+                  borderRadius: 'var(--radius-xl)',
+                  background: 'rgba(15, 23, 42, 0.4)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  animation: 'pulse 1.5s ease infinite',
+                }}
+              />
+            ))}
+          </div>
+        ) : error ? (
+          <div style={{
+            textAlign: 'center',
+            padding: 'var(--space-3xl) 0',
+            background: 'var(--glass-bg-secondary)',
+            backdropFilter: 'blur(var(--glass-blur-secondary))',
+            borderRadius: 'var(--radius-xl)',
+            border: '1px dashed rgba(239,68,68,0.25)'
+          }}>
+            <AlertCircle size={36} style={{ color: '#ef4444', margin: '0 auto var(--space-md)', display: 'block' }} />
+            <h3 style={{ marginBottom: 'var(--space-xs)', color: '#fff' }}>Unable to load categories</h3>
+            <p style={{ marginBottom: 'var(--space-md)', color: 'var(--color-text-muted)', maxWidth: 480, margin: '0 auto var(--space-md)' }}>
+              {error}
+            </p>
+            <button
+              onClick={loadData}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 99, background: 'rgba(239,68,68,0.1)', color: '#ef4444', cursor: 'pointer', fontSize: 'var(--text-sm)', fontWeight: 600 }}
+            >
+              <RefreshCw size={14} /> Retry
+            </button>
+          </div>
+        ) : filteredCategories.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 'var(--space-xl)' }}>
+            {filteredCategories.map((cat) => {
               const subs = subcategoriesMap[cat.id] || [];
               return (
                 <div

@@ -1,0 +1,562 @@
+# WorkStream — Start/Run Commands Cheat Sheet
+# Windows PowerShell
+# Last updated: 2026-09-15
+
+This file is the quick reference for starting WorkStream locally.
+Project structure:
+  freelance-marketplace/
+    backend/
+    frontend (project root)
+
+============================================================
+0. OPEN TWO OR THREE POWERSHELL TERMINALS
+============================================================
+
+Recommended:
+  Terminal 1 = PostgreSQL
+  Terminal 2 = Go backend
+  Terminal 3 = React frontend
+
+Keep Terminal 1 and Terminal 2 running while using the application.
+
+============================================================
+1. GO TO THE PROJECT ROOT
+============================================================
+
+If your project is located at:
+  C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace
+
+Run:
+
+cd "C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace"
+
+Check files:
+
+Get-ChildItem
+
+============================================================
+2. START POSTGRESQL
+============================================================
+
+IMPORTANT:
+PostgreSQL 18 is installed at:
+
+C:\Program Files\PostgreSQL\18\
+
+Your PostgreSQL server is NOT running as a Windows service, so start it manually.
+
+Start PostgreSQL:
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" start -D "C:\Program Files\PostgreSQL\18\data"
+
+Check PostgreSQL status:
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" status -D "C:\Program Files\PostgreSQL\18\data"
+
+Expected when running:
+
+server is running
+
+Check port 5432:
+
+Test-NetConnection localhost -Port 5432
+
+Expected:
+
+TcpTestSucceeded : True
+
+============================================================
+3. CONNECT TO THE WORKSTREAM DATABASE
+============================================================
+
+Connect to the database:
+
+& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d workstream
+
+It may ask for the PostgreSQL postgres-user password.
+
+Inside psql, useful commands:
+
+\dt
+
+Shows tables.
+
+\du
+
+Shows database users/roles.
+
+\l
+
+Shows databases.
+
+\q
+
+Exits psql.
+
+DO NOT leave PostgreSQL stopped while testing the application.
+
+============================================================
+4. RUN DATABASE MIGRATIONS
+============================================================
+
+Open a new PowerShell terminal.
+
+Go to backend:
+
+cd "C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace\backend"
+
+Run the project's migration runner:
+
+go run ./cmd/migrate
+
+After migration, verify tables:
+
+& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d workstream
+
+Then:
+
+\dt
+
+The database should contain the tables created by the WorkStream migrations.
+
+Current migration sequence includes:
+
+000001_create_initial_schema
+000002_seed_initial_data
+000003_add_auth_to_users
+000004_phase3_marketplace_taxonomy_and_discovery
+000005_phase4b_service_management
+000006_add_projects_and_proposals
+000007_create_contracts_and_milestones
+000008_create_payments_and_financial_ledger
+000009_phase7_communication
+000010_phase8_reviews
+
+============================================================
+5. START THE GO BACKEND
+============================================================
+
+From the backend folder:
+
+cd "C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace\backend"
+
+Start server:
+
+go run ./cmd/server
+
+Expected behavior:
+  Backend starts on port 8081.
+
+Keep this terminal open.
+
+Do NOT close the backend terminal while testing the frontend.
+
+============================================================
+6. TEST BACKEND HEALTH
+============================================================
+
+Open another PowerShell terminal.
+
+Run:
+
+Invoke-RestMethod http://localhost:8081/api/health
+
+A successful response should indicate that the backend is healthy.
+
+IMPORTANT:
+The health endpoint may return 200 even when PostgreSQL is unavailable.
+If database-backed endpoints return 500, check PostgreSQL first.
+
+============================================================
+7. TEST MARKETPLACE API
+============================================================
+
+Categories:
+
+Invoke-RestMethod http://localhost:8081/api/categories
+
+Services:
+
+Invoke-RestMethod http://localhost:8081/api/services
+
+If these return database errors:
+  1. Check PostgreSQL status.
+  2. Check port 5432.
+  3. Check that database "workstream" exists.
+  4. Run migrations.
+  5. Check backend logs.
+
+============================================================
+8. START THE REACT FRONTEND
+============================================================
+
+Open another PowerShell terminal.
+
+Go to project root:
+
+cd "C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace"
+
+Install dependencies ONLY if needed:
+
+npm install
+
+Start development server:
+
+npm run dev
+
+Vite should display a local URL, normally:
+
+http://localhost:5173/
+
+Open that URL in your browser.
+
+============================================================
+9. FRONTEND BUILD TEST
+============================================================
+
+Before a presentation/demo, verify production build:
+
+cd "C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace"
+
+npm run build
+
+A successful build should create/update:
+
+dist/
+
+The existing project has previously built successfully with Vite.
+
+============================================================
+10. OPTIONAL FRONTEND LINT
+============================================================
+
+If ESLint is configured:
+
+npm run lint
+
+If the project has no lint script, use:
+
+npm run
+
+to list available npm scripts.
+
+============================================================
+11. COMPLETE STARTUP ORDER
+============================================================
+
+EVERY TIME YOU WANT TO RUN WORKSTREAM:
+
+TERMINAL 1 — PostgreSQL
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" start -D "C:\Program Files\PostgreSQL\18\data"
+
+Then:
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" status -D "C:\Program Files\PostgreSQL\18\data"
+
+Then:
+
+Test-NetConnection localhost -Port 5432
+
+
+TERMINAL 2 — Backend
+
+cd "C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace\backend"
+
+go run ./cmd/server
+
+
+TERMINAL 3 — Frontend
+
+cd "C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace"
+
+npm run dev
+
+
+BROWSER:
+
+http://localhost:5173/
+
+
+============================================================
+12. FIRST-TIME / AFTER DATABASE CHANGES
+============================================================
+
+If migrations were added or database schema changed:
+
+1. Start PostgreSQL.
+2. Go to backend.
+3. Run:
+
+go run ./cmd/migrate
+
+4. Then start backend:
+
+go run ./cmd/server
+
+5. Then start frontend:
+
+npm run dev
+
+============================================================
+13. STOP EVERYTHING
+============================================================
+
+Stop React:
+  In the frontend terminal press:
+
+Ctrl + C
+
+Stop Go backend:
+  In the backend terminal press:
+
+Ctrl + C
+
+Stop PostgreSQL:
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" stop -D "C:\Program Files\PostgreSQL\18\data"
+
+Check PostgreSQL:
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" status -D "C:\Program Files\PostgreSQL\18\data"
+
+============================================================
+14. QUICK TROUBLESHOOTING
+============================================================
+
+PROBLEM: /api/categories returns 500
+------------------------------------
+Check:
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" status -D "C:\Program Files\PostgreSQL\18\data"
+
+Then:
+
+Test-NetConnection localhost -Port 5432
+
+If PostgreSQL is stopped:
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" start -D "C:\Program Files\PostgreSQL\18\data"
+
+Then verify database tables:
+
+& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d workstream
+
+\dt
+
+
+PROBLEM: Backend says "connection refused"
+------------------------------------------
+PostgreSQL is probably stopped.
+
+Start it:
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" start -D "C:\Program Files\PostgreSQL\18\data"
+
+
+PROBLEM: Backend cannot authenticate to PostgreSQL
+--------------------------------------------------
+Check:
+  - PostgreSQL password
+  - backend .env/database configuration
+  - database name = workstream
+  - PostgreSQL server is running
+
+
+PROBLEM: Frontend cannot connect to backend
+--------------------------------------------
+Check that:
+
+http://localhost:8081/api/health
+
+works.
+
+Then check that React is running:
+
+http://localhost:5173/
+
+
+PROBLEM: npm command fails
+--------------------------
+Run:
+
+node --version
+npm --version
+
+Then:
+
+npm install
+
+Then:
+
+npm run dev
+
+
+PROBLEM: Go command fails
+-------------------------
+Run:
+
+go version
+
+Expected project environment previously used:
+
+go1.27.0 windows/amd64
+
+
+============================================================
+15. USEFUL VERSION CHECKS
+============================================================
+
+Go:
+
+go version
+
+Node:
+
+node --version
+
+npm:
+
+npm --version
+
+PostgreSQL:
+
+& "C:\Program Files\PostgreSQL\18\bin\psql.exe" --version
+
+
+============================================================
+16. API ROUTES CURRENTLY USED BY WORKSTREAM
+============================================================
+
+Health:
+
+GET /api/health
+
+Authentication:
+
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/logout
+GET  /api/auth/me
+
+Marketplace:
+
+GET /api/categories
+GET /api/categories/:slug
+GET /api/categories/:slug/subcategories
+
+Services:
+
+GET /api/services
+GET /api/services/:id
+
+Additional routes have been added across later phases for:
+  projects
+  proposals
+  contracts
+  milestones
+  payments
+  communication
+  reviews
+
+For exact later-phase routes, check the current Go router/handlers rather than assuming route names.
+
+============================================================
+17. PRESENTATION / DEMO CHECKLIST
+============================================================
+
+Before recording your 10-minute WorkStream video:
+
+[ ] PostgreSQL is running
+[ ] Database "workstream" exists
+[ ] Migrations are applied
+[ ] Go backend starts on 8081
+[ ] /api/health works
+[ ] /api/categories works
+[ ] /api/services works
+[ ] React starts on 5173
+[ ] Buyer demo account works
+[ ] Freelancer demo account works
+[ ] Buyer project creation works
+[ ] Freelancer proposal works
+[ ] Proposal acceptance works
+[ ] Contract works
+[ ] Milestones work
+[ ] Messaging works
+[ ] Review flow works
+[ ] npm run build succeeds
+
+Recommended demo flow:
+
+Buyer
+  ↓
+Create Project
+  ↓
+Freelancer
+  ↓
+Submit Proposal
+  ↓
+Buyer
+  ↓
+Accept Proposal
+  ↓
+Contract
+  ↓
+Milestones
+  ↓
+Payment
+  ↓
+Completion
+  ↓
+Review
+  ↓
+Freelancer Reputation
+
+
+============================================================
+18. IMPORTANT SECURITY NOTE
+============================================================
+
+Never put these into the React frontend or GitHub:
+
+  PostgreSQL passwords
+  JWT secret
+  payment secret keys
+  private API keys
+  email service secrets
+
+Use .env / deployment environment variables.
+
+Do NOT commit .env if it contains real secrets.
+
+============================================================
+19. THE "I FORGOT EVERYTHING" COMMANDS
+============================================================
+
+If you only remember one section, use these.
+
+1. PostgreSQL:
+
+& "C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe" start -D "C:\Program Files\PostgreSQL\18\data"
+
+2. Backend:
+
+cd "C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace\backend"
+
+go run ./cmd/server
+
+3. Frontend:
+
+cd "C:\Users\User\.gemini\antigravity-ide\scratch\freelance-marketplace"
+
+npm run dev
+
+4. Open:
+
+http://localhost:5173/
+
+That's it.
+
+============================================================
+END OF WORKSTREAM STARTUP GUIDE
+============================================================

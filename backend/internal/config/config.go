@@ -11,7 +11,9 @@ import (
 
 // Config holds all backend environment configuration parameters
 type Config struct {
+	Environment         string
 	Port                string
+	DatabaseURL         string
 	DatabaseHost        string
 	DatabasePort        string
 	DatabaseUser        string
@@ -31,7 +33,9 @@ func Load() *Config {
 	_ = godotenv.Load("../.env")
 	_ = godotenv.Load("../../.env")
 
+	environment := getEnv("ENVIRONMENT", "development")
 	port := getEnv("PORT", "8080")
+	databaseURL := getEnv("DATABASE_URL", "")
 	dbHost := getEnv("DATABASE_HOST", "localhost")
 	dbPort := getEnv("DATABASE_PORT", "5432")
 	dbUser := getEnv("DATABASE_USER", "postgres")
@@ -52,7 +56,9 @@ func Load() *Config {
 	}
 
 	return &Config{
+		Environment:        environment,
 		Port:               port,
+		DatabaseURL:        databaseURL,
 		DatabaseHost:       dbHost,
 		DatabasePort:       dbPort,
 		DatabaseUser:       dbUser,
@@ -67,6 +73,9 @@ func Load() *Config {
 
 // GetDSN returns the PostgreSQL connection string
 func (c *Config) GetDSN() string {
+	if c.DatabaseURL != "" {
+		return c.DatabaseURL
+	}
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		c.DatabaseHost,

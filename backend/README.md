@@ -208,3 +208,91 @@ Repository (internal/repositories/service_repository.go)
         ▼ (SQL execution over connection pool)
 PostgreSQL Database
 ```
+
+---
+
+## Phase 6B — Internal Escrow and Financial Ledger
+
+Phase 6B adds an internal-only escrow simulation; it does not send money to a payment provider. `payments`, `wallets`, and `ledger_entries` are created by migration `000008`.
+
+- Amounts are stored as integer minor units, avoiding floating-point financial calculations.
+- Funding holds the freelancer's net amount in their pending wallet balance and records a `milestone_funded` ledger entry.
+- A buyer may release only a held payment for an approved milestone. Release atomically moves the net amount to the freelancer's available balance, increments total earnings, and records freelancer-earning, release, and platform-fee ledger entries.
+- Refunds are allowed only while funds are held and atomically reverse the pending wallet amount and append a refund entry.
+- A 10% platform fee is centrally defined in `models.PlatformFeePercent`. The internal provider is the only active provider; the schema reserves future provider values without integrating them.
+
+Protected endpoints: `POST /api/milestones/:id/fund`, `POST /api/payments/:id/release`, `POST /api/payments/:id/refund`, `GET /api/payments/:id`, `GET /api/contracts/:id/payments`, `GET /api/milestones/:id/payment`, `GET /api/me/payments`, `GET /api/me/wallet`, and `GET /api/me/ledger`.
+
+---
+
+## Phase 8 — Contract Reviews and Trust Profiles
+
+Phase 8 stores **contract reviews** in `reviews` (migration `000010`). If a Phase 1–4 service-review table is still present, that migration renames it to `service_reviews` before creating the contract-review schema. All review routes require a valid JWT (`Authorization: Bearer <token>`).
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/reviews` | Create a review for a completed contract |
+| `GET` | `/api/reviews/:id` | Get a non-deleted review |
+| `PATCH` | `/api/reviews/:id` | Owner-only update of rating/comment |
+| `DELETE` | `/api/reviews/:id` | Owner-only soft delete |
+| `GET` | `/api/users/:id/reviews` | Paginated received reviews (`page`, `limit`) newest first |
+| `GET` | `/api/users/:id/trust` | Evidence-based trust profile |
+| `GET` | `/api/contracts/:id/review-eligibility` | Whether the caller may review this contract |
+
+### Authentication and authorization
+
+- Reviewer identity is always taken from the JWT `user_id`. Client-supplied `reviewer_id` is ignored.
+- Only the review owner (the original reviewer) may `PATCH` or `DELETE` their review. The reviewee cannot edit or delete it.
+
+### Eligibility and server-derived participants
+
+A review is allowed only when:
+
+1. The contract exists and `status = completed`.
+2. The authenticated user is the contract `buyer_id` or `freelancer_id`.
+3. No directional review already exists for that `(contract_id, reviewer_id)`, including soft-deleted rows.
+
+The reviewee is the other contract party. Project ID is loaded from the contract. Self-reviews are rejected (`reviewer_id <> reviewee_id` in PostgreSQL and in eligibility logic).
+
+`POST /api/reviews` body:
+
+```json
+{ "contract_id": "ctr_...", "rating": 5, "comment": "optional, min 10 chars when present" }
+```
+
+Rating must be an integer 1–5. `is_verified` is not accepted from the client; successful contract reviews are stored as verified (`true`).
+
+### Soft deletion
+
+`DELETE` sets `deleted_at`. Normal `GET`, listings, and trust aggregates exclude deleted rows. The database row remains for audit. The unique constraint `UNIQUE(contract_id, reviewer_id, reviewee_id)` still applies after deletion, so a second directional review on the same contract is not allowed.
+
+### Transactional side effects on create
+
+`POST /api/reviews` inserts the review, a `new_review` notification for the **reviewee**, and a `review_created` activity event (actor = reviewer) in **one database transaction**. If any insert fails, the transaction rolls back. Notification recipients are never taken from the client.
+
+Activity metadata is limited to `review_id`, `rating`, `project_id`, and `contract_id`.
+
+### Trust tiers
+
+`growth_tier` is the **highest qualifying** tier:
+
+| Tier | Rule |
+|---|---|
+| Top Performer | ≥ 20 completed contracts AND ≥ 15 reviews AND average rating ≥ 4.8 |
+| Trusted | ≥ 10 completed contracts AND ≥ 8 reviews AND average rating ≥ 4.5 |
+| Established | ≥ 5 completed contracts AND ≥ 3 reviews AND average rating ≥ 4.0 |
+| Rising | ≥ 1 completed contract |
+| New | otherwise |
+
+### Trust metrics
+
+Calculated from current tables (deleted reviews excluded from rating fields):
+
+- `average_rating`, `rating_count`, `distribution` (counts for ratings 1–5), `verified_review_count`
+- `completed_projects`: contracts where the user is buyer or freelancer and `status = 'completed'`
+- `completion_rate`: `completed / (completed + cancelled + disputed)` as a percentage. `null` when the user has no terminal contracts.
+- `repeat_client_rate`: among unique counterparties on **completed** contracts, the percentage of counterparties with **2+** completed contracts with this user. Not derived from reviews. `null` when there are no completed counterparties.
+- `on_time_delivery_rate`: for contracts where the user is the **freelancer**, `approved` milestones that have both `due_date` and `completed_at`, percentage where `completed_at <= due_date`. `null` when no such dated completions exist.
+- `response_time_minutes`: average minutes from another participant's message to this user's next message in the same conversation (Phase 7 `messages` has no system-message flag; all stored messages are user-authored). `null` when no reply pairs exist.
+
+These endpoints do not invent placeholder percentages. Missing evidence is returned as `null`.

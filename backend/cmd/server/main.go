@@ -21,7 +21,7 @@ import (
 
 func main() {
 	log.Println("=================================================")
-	log.Println("  WorkStream Backend - Phase 2 Auth + Roles     ")
+	log.Println("  WorkStream Backend - Phase 10 Search & Matching")
 	log.Println("=================================================")
 
 	// 1. Load Configuration
@@ -46,20 +46,70 @@ func main() {
 	categoryRepo := repositories.NewCategoryRepository(db)
 	serviceRepo := repositories.NewServiceRepository(db)
 	userRepo := repositories.NewUserRepository(db)
+	projectRepo := repositories.NewProjectRepository(db)
+	proposalRepo := repositories.NewProposalRepository(db)
+	contractRepo := repositories.NewContractRepository(db)
+	milestoneRepo := repositories.NewMilestoneRepository(db)
+	paymentRepo := repositories.NewPaymentRepository(db)
+	communicationRepo := repositories.NewCommunicationRepository(db)
+	reviewRepo := repositories.NewReviewRepository(db)
+	freelancerDiscoveryRepo := repositories.NewFreelancerDiscoveryRepository(db)
+	adminRepo := repositories.NewAdminRepository(db)
+	reportRepo := repositories.NewReportRepository(db)
+	auditRepo := repositories.NewAuditRepository(db)
+	searchRepo := repositories.NewSearchRepository(db)
+	recommendationRepo := repositories.NewRecommendationRepository(db)
 
 	// 4. Initialize Services (business logic layer)
 	categoryService := services.NewCategoryService(categoryRepo)
-	serviceService := services.NewServiceService(serviceRepo)
+	serviceService := services.NewServiceService(serviceRepo, categoryRepo)
 	authService := services.NewAuthService(userRepo, cfg.JWTSecret, cfg.JWTExpirationHours)
+	projectService := services.NewProjectService(projectRepo, proposalRepo, categoryRepo, userRepo)
+	contractService := services.NewContractService(contractRepo, milestoneRepo, projectRepo)
+	paymentService := services.NewPaymentService(paymentRepo, milestoneRepo, contractRepo)
+	communicationService := services.NewCommunicationService(communicationRepo)
+	adminService := services.NewAdminService(adminRepo, reportRepo, auditRepo, communicationRepo)
+	searchService := services.NewSearchService(searchRepo)
+	matchingService := services.NewMatchingService(freelancerDiscoveryRepo, reviewRepo)
+	recommendationService := services.NewRecommendationService(recommendationRepo)
 
 	// 5. Initialize Handlers (presentation / HTTP layer)
-	healthHandler := handlers.NewHealthHandler()
+	healthHandler := handlers.NewHealthHandler(db)
 	categoryHandler := handlers.NewCategoryHandler(categoryService)
 	serviceHandler := handlers.NewServiceHandler(serviceService)
 	authHandler := handlers.NewAuthHandler(authService)
+	projectHandler := handlers.NewProjectHandler(projectService)
+	proposalHandler := handlers.NewProposalHandler(projectService)
+	contractHandler := handlers.NewContractHandler(contractService)
+	paymentHandler := handlers.NewPaymentHandler(paymentService)
+	communicationHandler := handlers.NewCommunicationHandler(communicationService)
+	reviewHandler := handlers.NewReviewHandler(reviewRepo)
+	freelancerDiscoveryHandler := handlers.NewFreelancerDiscoveryHandler(freelancerDiscoveryRepo)
+	adminHandler := handlers.NewAdminHandler(adminService)
+	searchHandler := handlers.NewSearchHandler(searchService)
+	matchingHandler := handlers.NewMatchingHandler(matchingService, projectRepo)
+	recommendationHandler := handlers.NewRecommendationHandler(recommendationService)
 
 	// 6. Setup Router & Routes
-	router := routes.SetupRouter(cfg, healthHandler, categoryHandler, serviceHandler, authHandler, authService)
+	router := routes.SetupRouter(
+		cfg,
+		healthHandler,
+		categoryHandler,
+		serviceHandler,
+		authHandler,
+		authService,
+		projectHandler,
+		proposalHandler,
+		contractHandler,
+		paymentHandler,
+		communicationHandler,
+		reviewHandler,
+		freelancerDiscoveryHandler,
+		adminHandler,
+		searchHandler,
+		matchingHandler,
+		recommendationHandler,
+	)
 
 	// 7. Setup HTTP Server
 	serverAddr := fmt.Sprintf(":%s", cfg.Port)
@@ -74,8 +124,10 @@ func main() {
 	// 8. Start HTTP Server in background goroutine
 	go func() {
 		log.Printf("[Server] WorkStream API server is listening on http://localhost%s", serverAddr)
-		log.Println("[Server] Health endpoint: http://localhost" + serverAddr + "/api/health")
-		log.Println("[Server] Auth endpoints:  POST /api/auth/register, POST /api/auth/login, GET /api/auth/me")
+		log.Println("[Server] Health endpoint:   http://localhost" + serverAddr + "/api/health")
+		log.Println("[Server] Search endpoints:  GET /api/search/services, GET /api/search/freelancers, GET /api/search/projects")
+		log.Println("[Server] Matching endpoint: GET /api/projects/:id/matches")
+		log.Println("[Server] Recommendations:   GET /api/recommendations/services, POST /api/recommendations/events")
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("[Server FATAL] Failed to start server: %v", err)
 		}

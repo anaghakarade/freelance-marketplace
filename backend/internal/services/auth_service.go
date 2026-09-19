@@ -120,7 +120,7 @@ func (s *AuthService) Login(req *models.LoginRequest) (*models.AuthResponse, err
 		return nil, ErrAccountInactive
 	}
 
-	// Verify password
+	// Verify password strictly with bcrypt
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
@@ -162,6 +162,22 @@ func (s *AuthService) ValidateToken(tokenStr string) (*models.JWTClaims, error) 
 		return nil, ErrInvalidToken
 	}
 
+	// Explicitly validate header algorithm and type
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	var header map[string]interface{}
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	alg, ok := header["alg"].(string)
+	if !ok || alg != "HS256" {
+		return nil, ErrInvalidToken
+	}
+
 	// Verify signature
 	message := parts[0] + "." + parts[1]
 	expectedSig := s.sign(message)
@@ -177,6 +193,11 @@ func (s *AuthService) ValidateToken(tokenStr string) (*models.JWTClaims, error) 
 
 	var claims models.JWTClaims
 	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	// Ensure critical claims exist
+	if claims.UserID == "" {
 		return nil, ErrInvalidToken
 	}
 
@@ -234,17 +255,19 @@ func normalizeRole(role string) string {
 
 // validateRegisterRequest performs field validation on the registration payload
 func validateRegisterRequest(req *models.RegisterRequest) error {
-	if strings.TrimSpace(req.Name) == "" {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
 		return fmt.Errorf("name is required")
 	}
-	if len(strings.TrimSpace(req.Name)) < 2 {
-		return fmt.Errorf("name must be at least 2 characters")
+	if len(name) < 2 || len(name) > 100 {
+		return fmt.Errorf("name must be between 2 and 100 characters")
 	}
-	if !emailRegex.MatchString(strings.TrimSpace(req.Email)) {
+	email := strings.TrimSpace(req.Email)
+	if !emailRegex.MatchString(email) || len(email) > 255 {
 		return fmt.Errorf("invalid email address")
 	}
-	if len(req.Password) < 6 {
-		return fmt.Errorf("password must be at least 6 characters")
+	if len(req.Password) < 6 || len(req.Password) > 128 {
+		return fmt.Errorf("password must be between 6 and 128 characters")
 	}
 	return nil
 }

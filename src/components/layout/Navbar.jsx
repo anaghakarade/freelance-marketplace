@@ -13,6 +13,8 @@ const Navbar = () => {
   const location = useLocation();
   const [currentUser, setCurrentUser] = useState(authService.getCurrentUser());
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [recentNotifications, setRecentNotifications] = useState([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [categoriesDropdownOpen, setCategoriesDropdownOpen] = useState(false);
@@ -39,22 +41,44 @@ const Navbar = () => {
 
   useEffect(() => {
     if (currentUser?.id) {
-      notificationService.getUnreadCount(currentUser.id).then(setUnreadCount);
-      const unsub = notificationService.subscribeToNotifications(currentUser.id, () => {
-        notificationService.getUnreadCount(currentUser.id).then(setUnreadCount);
-      });
-      return unsub;
+      const refresh = () => notificationService.getNotifications(currentUser.id).then(items => { setRecentNotifications(items); setUnreadCount(items.filter(item => !(item.isRead ?? item.is_read)).length); });
+      refresh();
+      const timer = setInterval(refresh, 30000);
+      return () => clearInterval(timer);
     }
   }, [currentUser?.id]);
 
   useEffect(() => {
-    // Load categories data once on mount for performant navbar mega menu
-    const cats = marketplaceService.getCategories();
-    const enriched = cats.slice(0, 8).map(c => ({
-      ...c,
-      subs: marketplaceService.getSubcategories(c.slug).slice(0, 3)
-    }));
-    setCategoriesData(enriched);
+    let isMounted = true;
+    async function loadNavbarCategories() {
+      try {
+        const cats = await marketplaceService.getCategories();
+        if (!isMounted || !Array.isArray(cats)) return;
+        const topCats = cats.slice(0, 8);
+        const enriched = await Promise.all(
+          topCats.map(async (c) => {
+            try {
+              const subs = await marketplaceService.getSubcategories(c.slug || c.id);
+              return {
+                ...c,
+                subs: Array.isArray(subs) ? subs.slice(0, 3) : [],
+              };
+            } catch {
+              return { ...c, subs: [] };
+            }
+          })
+        );
+        if (isMounted) {
+          setCategoriesData(enriched);
+        }
+      } catch (err) {
+        console.error('[Navbar] Failed to load categories for mega menu:', err);
+      }
+    }
+    loadNavbarCategories();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -135,6 +159,14 @@ const Navbar = () => {
           <nav className="navbar-nav" aria-label="Main Navigation">
             <Link to="/marketplace" className={`nav-item ${location.pathname === '/marketplace' ? 'active' : ''}`}>
               {t('navbar.services')}
+            </Link>
+
+            <Link to="/freelancers" className={`nav-item ${location.pathname === '/freelancers' ? 'active' : ''}`}>
+              Freelancers
+            </Link>
+
+            <Link to="/projects" className={`nav-item ${location.pathname.startsWith('/projects') ? 'active' : ''}`}>
+              Projects
             </Link>
 
             <Link to="/post-project" className={`nav-item ${location.pathname === '/post-project' ? 'active' : ''}`} style={{ color: 'var(--color-accent)', fontWeight: 700 }}>
@@ -342,8 +374,9 @@ const Navbar = () => {
 
           {/* Notification Bell Badge */}
           {currentUser && (
-            <Link
-              to="/messages"
+            <div className="nav-dropdown-wrapper">
+            <button
+              onClick={() => setNotificationsOpen(!notificationsOpen)}
               className="nav-item"
               style={{ position: 'relative', padding: '6px', display: 'inline-flex', alignItems: 'center' }}
               aria-label="Notifications"
@@ -369,7 +402,9 @@ const Navbar = () => {
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
-            </Link>
+            </button>
+            {notificationsOpen && <div className="user-dropdown-menu" style={{right:0,left:'auto',width:340,padding:12}}><div style={{display:'flex',justifyContent:'space-between'}}><strong>Notifications</strong><button onClick={async()=>{await Promise.all(recentNotifications.filter(n=>!(n.isRead??n.is_read)).map(n=>notificationService.markAsRead(n.id)));setUnreadCount(0);setRecentNotifications(v=>v.map(n=>({...n,isRead:true,is_read:true})));}}>Mark all</button></div><div className="user-dropdown-divider"/>{recentNotifications.length===0?<p style={{fontSize:13}}>No notifications yet.</p>:recentNotifications.slice(0,6).map(n=><button key={n.id} className="user-dropdown-item" style={{display:'block',width:'100%',fontWeight:(n.isRead??n.is_read)?400:700}} onClick={async()=>{await notificationService.markAsRead(n.id);setNotificationsOpen(false);if(n.entityType==='message'||n.entity_type==='message')navigate('/messages');if((n.type==='new_review'||n.Type==='new_review')&&currentUser?.role==='freelancer')navigate(`/seller/${currentUser.id}`)}}><span>{n.title}</span><small style={{display:'block',opacity:.65}}>{n.message}</small></button>)}</div>}
+            </div>
           )}
 
           {/* Authentication Area */}
@@ -475,6 +510,9 @@ const Navbar = () => {
 
           <div className="mobile-drawer-links">
             <Link to="/marketplace" className="mobile-drawer-item">{t('navbar.services')}</Link>
+            <Link to="/freelancers" className="mobile-drawer-item">Freelancers</Link>
+            <Link to="/projects" className="mobile-drawer-item">Projects</Link>
+            <Link to="/post-project" className="mobile-drawer-item">{t('navbar.postProject')}</Link>
             <Link to="/categories/trending" className="mobile-drawer-item">{t('navbar.trending')}</Link>
             <Link to="/categories" className="mobile-drawer-item">{t('categories.title')}</Link>
             

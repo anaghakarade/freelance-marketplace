@@ -7,6 +7,8 @@ import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { MapPin, Globe, CheckCircle2, Calendar, ArrowLeft, ShieldCheck, Award, Clock, Sparkles } from 'lucide-react';
+import TrustProfile from '../../components/reviews/TrustProfile';
+import ReviewList from '../../components/reviews/ReviewList';
 
 const SellerProfile = () => {
   const { id } = useParams();
@@ -15,13 +17,25 @@ const SellerProfile = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const user = userService.getUserById(id);
-    setSeller(user);
-    if (user) {
-      const allServices = marketplaceService.getServices();
-      setServices(allServices.filter(s => s.sellerId === user.id));
+    let isMounted = true;
+    async function loadSellerData() {
+      const user = userService.getUserById(id);
+      if (!isMounted) return;
+      setSeller(user);
+      if (user) {
+        try {
+          const allServices = await marketplaceService.getServices();
+          if (isMounted) {
+            setServices((allServices || []).filter(s => s.sellerId === user.id));
+          }
+        } catch (err) {
+          console.error('[SellerProfile] Failed to load services:', err);
+        }
+      }
+      if (isMounted) setLoading(false);
     }
-    setLoading(false);
+    loadSellerData();
+    return () => { isMounted = false; };
   }, [id]);
 
   if (loading) return <div style={{ textAlign: 'center', padding: 'var(--space-3xl)', color: 'var(--color-text-muted)' }}>Loading profile...</div>;
@@ -155,6 +169,10 @@ const SellerProfile = () => {
                 </div>
               </div>
             </div>
+
+            {/* About section */}
+            <TrustProfile userId={seller.id} />
+            <ReviewList userId={seller.id} />
 
             {/* About section */}
             <div style={{

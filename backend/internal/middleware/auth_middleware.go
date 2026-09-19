@@ -57,17 +57,46 @@ func RequireAuth(authService *services.AuthService) gin.HandlerFunc {
 	}
 }
 
+// OptionalAuth extracts user credentials if a valid Authorization header is present,
+// but does not reject the request if missing or invalid.
+func OptionalAuth(authService *services.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+				tokenStr := strings.TrimSpace(parts[1])
+				if tokenStr != "" {
+					if claims, err := authService.ValidateToken(tokenStr); err == nil {
+						c.Set("user_id", claims.UserID)
+						c.Set("email", claims.Email)
+						c.Set("role", claims.Role)
+					}
+				}
+			}
+		}
+		c.Next()
+	}
+}
+
 // RequireRole checks that the authenticated user has one of the permitted roles.
 // Must be used AFTER RequireAuth in the middleware chain.
 // Aborts with 403 Forbidden if the role does not match.
 func RequireRole(allowedRoles ...string) gin.HandlerFunc {
 	allowed := make(map[string]bool, len(allowedRoles))
 	for _, r := range allowedRoles {
-		// Normalize: seller and freelancer are equivalent
-		if strings.EqualFold(r, "freelancer") {
+		low := strings.ToLower(r)
+		// Normalize freelancer/seller
+		if low == "freelancer" || low == "seller" {
+			allowed["freelancer"] = true
 			allowed["seller"] = true
 		}
-		allowed[strings.ToLower(r)] = true
+		// Normalize buyer/client
+		if low == "buyer" || low == "client" {
+			allowed["buyer"] = true
+			allowed["client"] = true
+		}
+		allowed[low] = true
 	}
 
 	return func(c *gin.Context) {
