@@ -929,9 +929,16 @@ All 12 schema migrations (`000001` through `000012`) are automatically applied a
 
 ## Current Deployment Status
 
-> **DEPLOYMENT READY — CLOUD PROVISIONING PREPARED**
+> **LIVE PRODUCTION DEPLOYED — OPERATIONAL**
 
-The application infrastructure, IaC blueprints, and deployment configurations are complete and pushed to GitHub.
+WorkStream is live and fully operational on the cloud across its database, API backend, and static frontend layers.
+
+| Service | Endpoint URL | Status |
+| :--- | :--- | :--- |
+| **Frontend Application** | [https://workstream-frontend-212x.onrender.com](https://workstream-frontend-212x.onrender.com) | 🟢 **Live** |
+| **Backend API Service** | [https://workstream-backend.onrender.com](https://workstream-backend.onrender.com) | 🟢 **Live** |
+| **API Health Check** | [https://workstream-backend.onrender.com/api/health](https://workstream-backend.onrender.com/api/health) | 🟢 **Connected** (`{"status":"ok","database":"connected"}`) |
+| **PostgreSQL Database** | `workstream-db` (Render Managed PostgreSQL 15) | 🟢 **Active** (12 migrations applied) |
 
 See:
 * [Deployment Guide](docs/PHASE_13_DEPLOYMENT.md)
@@ -1052,8 +1059,8 @@ For the complete presentation sequence, see:
 | CI configuration            | ✅ Prepared |
 | Deployment infrastructure   | ✅ Prepared |
 | Documentation               | ✅ Complete |
-| Cloud provisioning          | ⏳ Pending  |
-| Live production deployment  | ⏳ Pending  |
+| Cloud provisioning          | ✅ Complete |
+| Live production deployment  | ✅ Complete |
 
 ---
 
@@ -1081,21 +1088,18 @@ git tag -a v1.0.0 -m "WorkStream v1.0.0 — Release Candidate"
 
 Potential future development areas include:
 
-* Production cloud deployment
-* Custom domain configuration
-* Production monitoring
-* Centralized logging
-* Advanced analytics
-* Automated email notifications
-* Payment gateway integration
-* File/object storage
+* Custom domain configuration (e.g. `workstream.io`)
+* Production monitoring & alerting (Prometheus / Grafana)
+* Centralized logging (ELK / Loki)
+* Advanced analytics dashboard
+* Automated email notifications (SendGrid / AWS SES)
+* Third-party payment gateway integration (Stripe / Razorpay)
+* S3-compatible cloud object storage for portfolio files
 * Advanced recommendation models
-* Search optimization
-* Performance monitoring
-* Horizontal scaling
+* Horizontal auto-scaling
 * Automated database backup strategy
 
-These items are outside the current v1.0 release scope unless explicitly enabled during subsequent development.
+These items are outside the current v1.0 release scope and represent clear post-release roadmap milestones.
 
 ---
 
@@ -1119,16 +1123,16 @@ The system separates frontend presentation, HTTP handling, business logic, persi
 
 # License
 
-Add the project's applicable license here.
-
-If this is an academic or private project, specify the appropriate usage and distribution terms.
+MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
 ## Project Status
 
-**WorkStream v1.0.0 — Release Candidate**
+**WorkStream v1.0.0 — Production Released & Live**
 
-The application has completed its defined implementation, testing, hardening, infrastructure preparation, and documentation requirements.
+The application has successfully completed implementation, testing, hardening, infrastructure provisioning, and live cloud deployment.
 
-**Current next operational milestone: Cloud Provisioning and Production Deployment.**
+* **Frontend**: [https://workstream-frontend-212x.onrender.com](https://workstream-frontend-212x.onrender.com)
+* **Backend API**: [https://workstream-backend.onrender.com](https://workstream-backend.onrender.com)
+* **API Health**: [https://workstream-backend.onrender.com/api/health](https://workstream-backend.onrender.com/api/health)

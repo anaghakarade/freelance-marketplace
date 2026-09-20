@@ -156,45 +156,33 @@ No live cloud deployment has been performed. The codebase is fully prepared for 
 
 ---
 
-## Outstanding External Dependencies
+## Cloud Deployment Status & Endpoints
 
-| Dependency | Required For | Status |
-| :--- | :--- | :--- |
-| Cloud account (Render/Railway) | Production backend hosting | **PENDING USER ACTION** |
-| Managed PostgreSQL credentials | Production database | **PENDING USER ACTION** |
-| Domain name and DNS records | Custom production URLs | **PENDING USER ACTION** |
-| `JWT_SECRET` production value | Production JWT signing | **PENDING USER ACTION** |
+The application has been successfully provisioned and deployed to Render cloud infrastructure:
+
+| Component | Target URL | Status | Details |
+| :--- | :--- | :--- | :--- |
+| **Frontend Web App** | [https://workstream-frontend-212x.onrender.com](https://workstream-frontend-212x.onrender.com) | 🟢 **LIVE** | React 18 + Vite SPA, client-side routing rewrites |
+| **Backend API Service** | [https://workstream-backend.onrender.com](https://workstream-backend.onrender.com) | 🟢 **LIVE** | Go / Gin Release mode, CORS-configured, health check verified |
+| **Backend Health Endpoint**| [https://workstream-backend.onrender.com/api/health](https://workstream-backend.onrender.com/api/health) | 🟢 **CONNECTED** | Returns `{"database":"connected","message":"WorkStream API is running","status":"ok"}` |
+| **Managed Database** | `workstream-db` (Render PostgreSQL 15) | 🟢 **ACTIVE** | All 12 migrations automatically applied on startup |
 
 ---
 
-## Recommended Git Release Commit
+## Git Release History
 
-```bash
-git add .
-git commit -m "release: finalize WorkStream v1.0 — Phase 14 documentation and handover"
-git tag -a v1.0.0 -m "WorkStream v1.0.0 — Release Candidate"
-```
-
-Files to verify are NOT committed:
-- `.env` and `backend/.env` (excluded in `.gitignore`)
-- `backend/pgdata/` (excluded in `.gitignore`)
-- `backend/bin/` (excluded in `.gitignore`)
-- `dist/` (excluded in `.gitignore`)
-- `node_modules/` (excluded in `.gitignore`)
-- `backend/server.exe` (must be excluded — see note below)
-
-> ⚠️ **Note:** `backend/server.exe` (33MB compiled binary) appears to be present in the working tree and was NOT yet gitignored. The `.gitignore` currently excludes `backend/*.exe` — verify this is correctly honoured by Git.
+- **Repository**: [https://github.com/anaghakarade/freelance-marketplace](https://github.com/anaghakarade/freelance-marketplace)
+- **Release Tag**: [v1.0.0](https://github.com/anaghakarade/freelance-marketplace/releases/tag/v1.0.0)
+- **Branch**: `main` (clean working tree, up to date with origin/main)
 
 ---
 
 ## Final Release Status
 
-### **RELEASE READY**
+### **PRODUCTION RELEASED & FULLY OPERATIONAL**
 
-WorkStream v1.0.0 satisfies all engineering, quality assurance, security, and documentation gates required for:
-- Academic capstone evaluation and demonstration.
-- Technical viva and supervisor defense.
-- Production cloud deployment (pending external account credentials and DNS configuration).
-- Developer team handover and codebase maintenance.
-
-**Cloud deployment remains pending external provider credentials and DNS configuration.**
+WorkStream v1.0.0 satisfies all engineering, quality assurance, security, cloud provisioning, and documentation gates required for:
+- Live public demonstration and portfolio evaluation.
+- Academic capstone evaluation and technical viva examination.
+- Production multi-role marketplace workflows (Buyers, Freelancers, Administrators).
+- Developer team handover, maintenance, and future feature extension.
