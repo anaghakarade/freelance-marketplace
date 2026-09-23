@@ -145,6 +145,15 @@ export default function PostProject() {
       });
 
       setSubmittedProject(newProj);
+      try {
+        const cached = JSON.parse(localStorage.getItem('workstream_cached_my_projects')) || [];
+        localStorage.setItem(
+          'workstream_cached_my_projects',
+          JSON.stringify([newProj, ...cached.filter(p => p.id !== newProj.id)])
+        );
+      } catch (cErr) {
+        // ignore
+      }
       // Auto-redirect to dashboard in 8 seconds (user can cancel by clicking "Post Another")
       setRedirectCountdown(8);
 
@@ -343,6 +352,7 @@ export default function PostProject() {
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <Link
                   to={`/projects/${submittedProject.id}`}
+                  state={{ project: submittedProject }}
                   className="btn btn-primary btn-md"
                   style={{ borderRadius: '10px' }}
                 >

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Briefcase,
@@ -25,71 +25,119 @@ import Badge from '../../components/ui/Badge';
 export default function ProjectDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const currentUser = authService.getCurrentUser();
+  const location = useLocation();
+  const initialProject = location.state?.project || null;
 
-  const [project, setProject] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(() => authService.getCurrentUser());
+
+  useEffect(() => {
+    const handleAuth = () => setCurrentUser(authService.getCurrentUser());
+    window.addEventListener('authChange', handleAuth);
+    return () => window.removeEventListener('authChange', handleAuth);
+  }, []);
+
+  const [project, setProject] = useState(initialProject);
+  const [loading, setLoading] = useState(!initialProject);
   const [error, setError] = useState(null);
 
   // Proposal modal state
   const [showModal, setShowModal] = useState(false);
   const [proposalForm, setProposalForm] = useState({
     coverLetter: '',
-    bidAmount: '',
-    deliveryDays: '',
+    bidAmount: initialProject?.fixedBudget || initialProject?.budgetMin || 500,
+    deliveryDays: 14,
     estimatedDuration: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  const [matches, setMatches] = useState([]);
+  // Instant deterministic match preview if project is passed via navigation
+  const [matches, setMatches] = useState(() => {
+    if (initialProject) {
+      try {
+        return matchingApi.computeDeterministicMatches(initialProject);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
   const [loadingMatches, setLoadingMatches] = useState(false);
+
+  const currentUserId = currentUser?.id;
+  const currentUserRole = currentUser?.role;
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    setLoading(true);
+
+    let isMounted = true;
+    if (!initialProject) {
+      setLoading(true);
+    }
 
     projectApi
       .getProjectById(id)
-      .then((data) => {
+      .then(async (data) => {
+        if (!isMounted) return;
         setProject(data);
+        setError(null);
+
         if (data) {
           const defaultBid = data.fixedBudget || data.budgetMin || 500;
           setProposalForm((prev) => ({
             ...prev,
-            bidAmount: defaultBid,
-            deliveryDays: 14,
+            bidAmount: prev.bidAmount || defaultBid,
+            deliveryDays: prev.deliveryDays || 14,
           }));
 
-          // If buyer owns the project, is buyer role, or is admin, fetch intelligent matches
+          // Always compute instant deterministic matches first
+          const instantMatches = matchingApi.computeDeterministicMatches(data);
+          if (instantMatches && instantMatches.length > 0) {
+            setMatches(instantMatches);
+          }
+
+          // If buyer owns the project, is buyer role, or is admin, fetch backend matches
           if (currentUser && (
             currentUser.id === data.buyerId ||
             currentUser.role === 'admin' ||
             currentUser.role === 'buyer'
           )) {
             setLoadingMatches(true);
-            matchingApi
-              .getProjectMatches(id, { limit: 10 }, data)
-              .then((mRes) => {
-                // apiClient already unwraps data.data — mRes is ProjectMatchesResponse directly
+            try {
+              const mRes = await matchingApi.getProjectMatches(id, { limit: 10 }, data);
+              if (isMounted) {
                 const matchList = Array.isArray(mRes) ? mRes : (mRes?.matches || []);
-                setMatches(matchList);
-              })
-              .catch((mErr) => {
-                console.warn('[ProjectDetails] Failed to load matches:', mErr);
+                if (matchList && matchList.length > 0) {
+                  setMatches(matchList);
+                }
+              }
+            } catch (mErr) {
+              console.warn('[ProjectDetails] Backend matching failed, keeping deterministic matches:', mErr);
+              if (isMounted) {
                 setMatches(matchingApi.computeDeterministicMatches(data));
-              })
-              .finally(() => setLoadingMatches(false));
+              }
+            } finally {
+              if (isMounted) setLoadingMatches(false);
+            }
           }
         }
       })
       .catch((err) => {
+        if (!isMounted) return;
         console.error('[ProjectDetails] Failed to load project:', err);
-        setError('Project not found or failed to load.');
+        if (!initialProject) {
+          setError('Project not found or failed to load.');
+        }
       })
-      .finally(() => setLoading(false));
-  }, [id, currentUser]);
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id, currentUserId, currentUserRole]);
 
   const handleOpenModal = () => {
     if (!currentUser) {

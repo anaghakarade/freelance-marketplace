@@ -120,6 +120,13 @@ export default function BuyerDashboard() {
     try {
       const projs = await projectApi.getMyProjects();
       setMyProjects(projs || []);
+      if (projs && projs.length > 0) {
+        try {
+          localStorage.setItem('workstream_cached_my_projects', JSON.stringify(projs));
+        } catch {
+          // ignore
+        }
+      }
     } catch (err) {
       console.error('[BuyerDashboard] Failed to load projects:', err);
     } finally {
@@ -620,6 +627,7 @@ export default function BuyerDashboard() {
                           </Button>
                           <Link
                             to={`/projects/${p.id}`}
+                            state={{ project: p }}
                             className="btn btn-outline btn-sm"
                             style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}
                           >

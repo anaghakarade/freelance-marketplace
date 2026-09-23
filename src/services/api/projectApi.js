@@ -57,11 +57,36 @@ export async function getProjects({
 }
 
 /**
- * Fetch single project by ID
+ * Fetch single project by ID (with resilient offline/cache fallback)
  */
 export async function getProjectById(id) {
-  const response = await apiClient.get(`/projects/${id}`);
-  return response?.data ?? response;
+  try {
+    const response = await apiClient.get(`/projects/${id}`);
+    const proj = response?.data ?? response;
+    if (proj && (proj.id || proj.title)) return proj;
+  } catch (err) {
+    console.warn('[projectApi] Failed to fetch project from backend:', err.message);
+  }
+
+  // Fallback 1: Check cached buyer projects
+  try {
+    const cachedMy = JSON.parse(localStorage.getItem('workstream_cached_my_projects')) || [];
+    const found = cachedMy.find(p => p.id === id);
+    if (found) return found;
+  } catch {
+    // ignore
+  }
+
+  // Fallback 2: Check localStorage 'workstream_projects'
+  try {
+    const localProjects = JSON.parse(localStorage.getItem('workstream_projects')) || [];
+    const found = localProjects.find(p => p.id === id);
+    if (found) return found;
+  } catch {
+    // ignore
+  }
+
+  throw new Error(`Project with ID ${id} not found.`);
 }
 
 /**
