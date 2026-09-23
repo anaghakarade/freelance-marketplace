@@ -52,6 +52,20 @@ export default function PostProject() {
     }));
   };
 
+  const handlePostAnother = () => {
+    setSubmittedProject(null);
+    setFormData({
+      outcomeGoal: 'Build Something',
+      title: '',
+      description: '',
+      budget: '400',
+      deadline: '14',
+      skills: 'React, Figma',
+      categoryId: categories[0]?.id || 'cat_2',
+    });
+    setSubmitError(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError(null);
@@ -79,6 +93,25 @@ export default function PostProject() {
     setSubmitting(true);
 
     try {
+      // Pre-check for duplicate project with same title for this buyer
+      try {
+        const existingProjects = await projectApi.getMyProjects();
+        const dup = (existingProjects || []).find(
+          p =>
+            (p.status === 'open' || p.status === 'in_progress') &&
+            p.title?.trim().toLowerCase() === formData.title.trim().toLowerCase()
+        );
+        if (dup) {
+          setSubmitError(
+            `You already have an active project titled "${dup.title}". To avoid creating duplicates, please edit your existing project in the Buyer Dashboard or enter a distinct title.`
+          );
+          setSubmitting(false);
+          return;
+        }
+      } catch (checkErr) {
+        console.warn('[PostProject] Could not pre-verify duplicates:', checkErr);
+      }
+
       // 1. Post to PostgreSQL Backend API
       const newProj = await projectApi.createProject({
         title: formData.title.trim(),
@@ -295,7 +328,7 @@ export default function PostProject() {
                   My Projects Dashboard
                 </Link>
                 <button
-                  onClick={() => setSubmittedProject(null)}
+                  onClick={handlePostAnother}
                   className="btn btn-outline btn-md"
                   style={{ borderRadius: '10px' }}
                 >

@@ -248,6 +248,19 @@ func TestProjectService_CreateAndValidateProject(t *testing.T) {
 	if proj.BuyerID != "usr_buyer_1" {
 		t.Errorf("expected buyer ID 'usr_buyer_1', got '%s'", proj.BuyerID)
 	}
+
+	// 4. Duplicate project creation (same buyer, same title)
+	_, err = svc.CreateProject(ctx, "usr_buyer_1", models.CreateProjectRequest{
+		Title:       "custom analytics dashboard in react", // case-insensitive duplicate
+		Description: "Another comprehensive project description that easily exceeds the required fifty characters limit.",
+		CategoryID:  "cat_1",
+		Skills:      []string{"React"},
+		BudgetType:  "fixed",
+		FixedBudget: &fixedBudget,
+	})
+	if err == nil {
+		t.Fatalf("expected validation error for duplicate project, got nil")
+	}
 }
 
 func TestProjectService_ProposalLifecycleAndAcceptWorkflow(t *testing.T) {

@@ -205,6 +205,17 @@ func (s *projectService) CreateProject(ctx context.Context, buyerID string, req 
 		duration = "1 to 3 months"
 	}
 
+	// Check for duplicate active project by this buyer
+	existingProjects, err := s.projectRepo.GetByBuyerID(ctx, buyerID)
+	if err == nil {
+		for _, ep := range existingProjects {
+			if (ep.Status == "open" || ep.Status == "in_progress") && strings.EqualFold(strings.TrimSpace(ep.Title), title) {
+				valErrors["title"] = "You already have an active project with this title. Please edit your existing project or choose a distinct title."
+				break
+			}
+		}
+	}
+
 	if len(valErrors) > 0 {
 		return nil, &ServiceValidationError{Errors: valErrors}
 	}

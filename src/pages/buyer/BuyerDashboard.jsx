@@ -8,7 +8,7 @@ import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import DashboardSidebar from '../../components/dashboard/DashboardSidebar';
-import { LayoutDashboard, FileText, Mail, ShoppingCart, CheckCircle, Clock, ChevronDown, ChevronUp, Sparkles, HeartHandshake, ShieldCheck, PlusCircle, Briefcase, ThumbsUp, X, Check, ExternalLink, Layers, Users } from 'lucide-react';
+import { LayoutDashboard, FileText, Mail, ShoppingCart, CheckCircle, Clock, ChevronDown, ChevronUp, Sparkles, HeartHandshake, ShieldCheck, PlusCircle, Briefcase, ThumbsUp, X, Check, ExternalLink, Layers, Users, Trash2 } from 'lucide-react';
 
 const ORDER_STEPS = [
   { status: 'pending', label: 'Order Placed' },
@@ -84,6 +84,20 @@ export default function BuyerDashboard() {
   const [projectProposals, setProjectProposals] = useState([]);
   const [loadingProposals, setLoadingProposals] = useState(false);
   const [decisionFeedback, setDecisionFeedback] = useState(null);
+  const [projectFeedback, setProjectFeedback] = useState(null);
+
+  const handleDeleteProject = async (projectId, projectTitle) => {
+    if (!window.confirm(`Are you sure you want to delete "${projectTitle}"? This will permanently remove the project from the marketplace.`)) {
+      return;
+    }
+    try {
+      await projectApi.deleteProject(projectId);
+      setProjectFeedback({ type: 'success', text: `Project "${projectTitle}" was successfully deleted.` });
+      fetchMyProjects();
+    } catch (err) {
+      setProjectFeedback({ type: 'error', text: err.message || 'Failed to delete project.' });
+    }
+  };
 
   // Contracts State (Phase 6A)
   const [myContracts, setMyContracts] = useState([]);
@@ -471,6 +485,32 @@ export default function BuyerDashboard() {
               </Button>
             </div>
 
+            {projectFeedback && (
+              <div
+                style={{
+                  marginBottom: '20px',
+                  padding: '12px 18px',
+                  borderRadius: '10px',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: projectFeedback.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                  border: `1px solid ${projectFeedback.type === 'success' ? 'var(--color-accent)' : '#ef4444'}`,
+                  color: projectFeedback.type === 'success' ? 'var(--color-accent)' : '#fca5a5',
+                }}
+              >
+                <span>{projectFeedback.text}</span>
+                <button
+                  type="button"
+                  onClick={() => setProjectFeedback(null)}
+                  style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 2 }}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+
             {loadingProjects ? (
               <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--color-text-light)' }}>
                 <div className="spinner" style={{ margin: '0 auto 16px' }} />
@@ -568,7 +608,7 @@ export default function BuyerDashboard() {
                           <span>Timeline: <strong>{p.estimatedDuration || p.estimated_duration || 'Flexible'}</strong></span>
                         </div>
 
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <Button
                             variant="primary"
                             size="sm"
@@ -586,6 +626,17 @@ export default function BuyerDashboard() {
                             <Sparkles size={13} style={{ color: 'var(--color-accent)' }} />
                             <span>Matched Talent & Brief</span>
                           </Link>
+                          {(p.status === 'open' || p.status === 'closed') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteProject(p.id, p.title)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 6, borderColor: 'rgba(239,68,68,0.35)', color: '#f87171' }}
+                            >
+                              <Trash2 size={13} />
+                              <span>Delete</span>
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
