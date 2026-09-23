@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Sparkles, CheckCircle2, ArrowRight, Shield, Award, Clock, DollarSign } from 'lucide-react';
 import { marketplaceService } from '../../services/marketplaceService';
@@ -35,6 +35,8 @@ export default function PostProject() {
 
   const [submittedProject, setSubmittedProject] = useState(null);
   const [matchedResults, setMatchedResults] = useState([]);
+  const [redirectCountdown, setRedirectCountdown] = useState(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -54,6 +56,9 @@ export default function PostProject() {
 
   const handlePostAnother = () => {
     setSubmittedProject(null);
+    setMatchedResults([]);
+    setRedirectCountdown(null);
+    submittingRef.current = false;
     setFormData({
       outcomeGoal: 'Build Something',
       title: '',
@@ -66,9 +71,23 @@ export default function PostProject() {
     setSubmitError(null);
   };
 
+  // Auto-redirect countdown after successful project creation
+  useEffect(() => {
+    if (redirectCountdown === null) return;
+    if (redirectCountdown <= 0) {
+      navigate('/buyer?tab=projects');
+      return;
+    }
+    const timer = setTimeout(() => setRedirectCountdown(prev => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [redirectCountdown, navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError(null);
+
+    // Prevent double-submit
+    if (submittingRef.current) return;
 
     if (!currentUser) {
       navigate('/login?redirect=/post-project');
@@ -91,6 +110,7 @@ export default function PostProject() {
     }
 
     setSubmitting(true);
+    submittingRef.current = true;
 
     try {
       // Pre-check for duplicate project with same title for this buyer
@@ -125,6 +145,8 @@ export default function PostProject() {
       });
 
       setSubmittedProject(newProj);
+      // Auto-redirect to dashboard in 8 seconds (user can cancel by clicking "Post Another")
+      setRedirectCountdown(8);
 
       // 2. Also calculate WorkStream Match recommendations
       const services = await marketplaceService.getServices();
@@ -143,6 +165,7 @@ export default function PostProject() {
     } catch (err) {
       console.error('[PostProject] Creation error:', err);
       setSubmitError(err.message || 'Failed to post project. Please verify inputs.');
+      submittingRef.current = false;
     } finally {
       setSubmitting(false);
     }
@@ -310,6 +333,11 @@ export default function PostProject() {
                 <div style={{ fontSize: '0.88rem', color: 'var(--color-text-light)', marginTop: '4px' }}>
                   Budget: ${submittedProject.fixedBudget || submittedProject.fixed_budget || submittedProject.budgetMin || submittedProject.budget_min || submittedProject.budget} • Status: <strong style={{ color: 'var(--color-accent)' }}>Live / Open</strong>
                 </div>
+                {redirectCountdown !== null && redirectCountdown > 0 && (
+                  <div style={{ marginTop: '8px', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                    Redirecting to your dashboard in <strong style={{ color: 'var(--color-accent)' }}>{redirectCountdown}s</strong>…
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -324,6 +352,7 @@ export default function PostProject() {
                   to="/buyer?tab=projects"
                   className="btn btn-outline btn-md"
                   style={{ borderRadius: '10px' }}
+                  onClick={() => setRedirectCountdown(null)}
                 >
                   My Projects Dashboard
                 </Link>

@@ -62,16 +62,23 @@ export default function ProjectDetails() {
             deliveryDays: 14,
           }));
 
-          // If buyer owns the project, fetch intelligent matches
-          if (currentUser && (currentUser.id === data.buyerId || currentUser.role === 'admin')) {
+          // If buyer owns the project, is buyer role, or is admin, fetch intelligent matches
+          if (currentUser && (
+            currentUser.id === data.buyerId ||
+            currentUser.role === 'admin' ||
+            currentUser.role === 'buyer'
+          )) {
             setLoadingMatches(true);
             matchingApi
-              .getProjectMatches(id, { limit: 5 })
+              .getProjectMatches(id, { limit: 10 }, data)
               .then((mRes) => {
-                setMatches(mRes.matches || []);
+                // apiClient already unwraps data.data — mRes is ProjectMatchesResponse directly
+                const matchList = Array.isArray(mRes) ? mRes : (mRes?.matches || []);
+                setMatches(matchList);
               })
               .catch((mErr) => {
                 console.warn('[ProjectDetails] Failed to load matches:', mErr);
+                setMatches(matchingApi.computeDeterministicMatches(data));
               })
               .finally(() => setLoadingMatches(false));
           }
@@ -150,8 +157,11 @@ export default function ProjectDetails() {
     );
   }
 
-  const isOwner = currentUser?.id === project.buyerId;
+  const isOwner = currentUser?.id === project.buyerId || 
+    (currentUser?.role === 'buyer' && currentUser?.role !== 'freelancer' && currentUser?.role !== 'seller');
+  const isAdmin = currentUser?.role === 'admin';
   const isFreelancer = currentUser?.role === 'freelancer' || currentUser?.role === 'seller';
+  const canViewMatches = isOwner || isAdmin;
 
   const formattedBudget =
     project.budgetType === 'fixed'
@@ -319,7 +329,7 @@ export default function ProjectDetails() {
             </div>
 
             {/* RECOMMENDED FREELANCERS (Phase 10 Intelligent Matching) */}
-            {isOwner && (
+            {canViewMatches && (
               <div style={{ marginTop: '36px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -339,11 +349,14 @@ export default function ProjectDetails() {
 
                 {loadingMatches ? (
                   <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                    Analyzing requirement matches...
+                    <div className="spinner" style={{ margin: '0 auto 12px' }} />
+                    <p>Analyzing candidate pool against your requirements...</p>
                   </div>
                 ) : matches.length === 0 ? (
                   <div style={{ padding: '24px', background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '14px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-                    No matching candidates found at this time.
+                    <Sparkles size={24} color="rgba(255,255,255,0.2)" style={{ margin: '0 auto 12px' }} />
+                    <p style={{ marginBottom: '6px', fontWeight: 600 }}>No active freelancers found yet</p>
+                    <p style={{ fontSize: '0.82rem' }}>As freelancers register and become active on WorkStream, matched candidates will appear here ranked by compatibility score.</p>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
