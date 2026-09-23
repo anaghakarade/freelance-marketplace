@@ -61,7 +61,7 @@ export async function getProjects({
  */
 export async function getProjectById(id) {
   const response = await apiClient.get(`/projects/${id}`);
-  return response.data;
+  return response?.data ?? response;
 }
 
 /**
@@ -69,7 +69,7 @@ export async function getProjectById(id) {
  */
 export async function createProject(data) {
   const response = await apiClient.post('/projects', data);
-  return response.data;
+  return response?.data ?? response;
 }
 
 /**
@@ -77,7 +77,7 @@ export async function createProject(data) {
  */
 export async function getMyProjects() {
   const response = await apiClient.get('/projects/my');
-  return response.data?.projects || [];
+  return response?.projects || response?.data?.projects || (Array.isArray(response) ? response : []);
 }
 
 /**
@@ -85,7 +85,7 @@ export async function getMyProjects() {
  */
 export async function updateProject(id, data) {
   const response = await apiClient.put(`/projects/${id}`, data);
-  return response.data;
+  return response?.data ?? response;
 }
 
 /**
@@ -93,7 +93,7 @@ export async function updateProject(id, data) {
  */
 export async function updateProjectStatus(id, status) {
   const response = await apiClient.patch(`/projects/${id}/status`, { status });
-  return response.data;
+  return response?.data ?? response;
 }
 
 /**
@@ -101,7 +101,7 @@ export async function updateProjectStatus(id, status) {
  */
 export async function deleteProject(id) {
   const response = await apiClient.delete(`/projects/${id}`);
-  return response.data;
+  return response?.data ?? response;
 }
 
 /**
@@ -109,7 +109,7 @@ export async function deleteProject(id) {
  */
 export async function submitProposal(projectId, data) {
   const response = await apiClient.post(`/projects/${projectId}/proposals`, data);
-  return response.data;
+  return response?.data ?? response;
 }
 
 /**
@@ -117,7 +117,7 @@ export async function submitProposal(projectId, data) {
  */
 export async function getMyProposals() {
   const response = await apiClient.get('/proposals/my');
-  return response.data?.proposals || [];
+  return response?.proposals || response?.data?.proposals || (Array.isArray(response) ? response : []);
 }
 
 /**
@@ -125,7 +125,7 @@ export async function getMyProposals() {
  */
 export async function getProjectProposals(projectId) {
   const response = await apiClient.get(`/projects/${projectId}/proposals`);
-  return response.data?.proposals || [];
+  return response?.proposals || response?.data?.proposals || (Array.isArray(response) ? response : []);
 }
 
 /**
@@ -133,7 +133,7 @@ export async function getProjectProposals(projectId) {
  */
 export async function withdrawProposal(proposalId) {
   const response = await apiClient.delete(`/proposals/${proposalId}`);
-  return response.data;
+  return response?.data ?? response;
 }
 
 /**
@@ -141,7 +141,7 @@ export async function withdrawProposal(proposalId) {
  */
 export async function shortlistProposal(proposalId) {
   const response = await apiClient.patch(`/proposals/${proposalId}/shortlist`);
-  return response.data;
+  return response?.data ?? response;
 }
 
 /**
@@ -149,7 +149,7 @@ export async function shortlistProposal(proposalId) {
  */
 export async function rejectProposal(proposalId) {
   const response = await apiClient.patch(`/proposals/${proposalId}/reject`);
-  return response.data;
+  return response?.data ?? response;
 }
 
 /**
@@ -157,7 +157,7 @@ export async function rejectProposal(proposalId) {
  */
 export async function acceptProposal(proposalId) {
   const response = await apiClient.patch(`/proposals/${proposalId}/accept`);
-  return response.data;
+  return response?.data ?? response;
 }
 
 export const projectApi = {

@@ -355,18 +355,78 @@ export default function BuyerDashboard() {
             <p style={{ marginBottom: 'var(--space-xl)', color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)' }}>
               Welcome back, {currentUser.name.split(' ')[0]}
             </p>
-            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: '32px' }}>
+            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: '32px' }}>
               {[
-                { label: 'Active Orders', value: orders.filter(o => ['active', 'requirements_submitted', 'delivered'].includes(o.status)).length },
-                { label: 'Completed', value: orders.filter(o => o.status === 'completed').length },
-                { label: 'Total Gigs', value: orders.length },
-              ].map(({ label, value }) => (
-                <div key={label} className="stat-card">
+                { label: 'Posted Projects', value: myProjects.length, onClick: () => handleTabChange('projects') },
+                { label: 'Active Contracts', value: activeContractsCount, onClick: () => handleTabChange('contracts') },
+                { label: 'Active Orders', value: orders.filter(o => ['active', 'requirements_submitted', 'delivered'].includes(o.status)).length, onClick: () => handleTabChange('orders') },
+                { label: 'Completed Gigs', value: orders.filter(o => o.status === 'completed').length, onClick: () => handleTabChange('orders') },
+              ].map(({ label, value, onClick }) => (
+                <div key={label} className="stat-card" onClick={onClick} style={{ cursor: 'pointer' }}>
                   <div className="stat-label">{label}</div>
                   <div className="stat-value">{value}</div>
                 </div>
               ))}
             </div>
+
+            {/* Recent Posted Projects (Overview) */}
+            {myProjects.length > 0 && (
+              <div style={{ marginBottom: '32px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
+                  <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Briefcase size={18} color="var(--color-accent)" />
+                    <span>Recent Posted Projects</span>
+                  </h3>
+                  <Button variant="ghost" size="sm" onClick={() => handleTabChange('projects')}>
+                    View All Projects ({myProjects.length}) →
+                  </Button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {myProjects.slice(0, 3).map((p) => {
+                    const isFixed = (p.budgetType || p.budget_type) === 'fixed';
+                    const fixedVal = p.fixedBudget ?? p.fixed_budget ?? p.budget;
+                    const minVal = p.budgetMin ?? p.budget_min;
+                    const maxVal = p.budgetMax ?? p.budget_max;
+                    const budgetStr = isFixed
+                      ? fixedVal ? `$${fixedVal}` : minVal && maxVal ? `$${minVal}–$${maxVal}` : 'Fixed'
+                      : `$${minVal || 0}–$${maxVal || 0}/hr`;
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '16px 20px',
+                          background: 'rgba(15, 23, 42, 0.45)',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                          borderRadius: '12px',
+                          flexWrap: 'wrap',
+                          gap: '12px',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700, color: '#fff', fontSize: '1rem', marginBottom: '4px' }}>
+                            {p.title}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                            {p.categoryName || p.category_name || 'Project'} • {p.proposalCount ?? p.proposal_count ?? 0} proposals • Status: <span style={{ color: 'var(--color-accent)', textTransform: 'capitalize' }}>{p.status || 'open'}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--color-accent)' }}>
+                            {budgetStr}
+                          </span>
+                          <Button variant="outline" size="sm" onClick={() => handleTabChange('projects')}>
+                            Manage
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <h3 style={{ marginBottom: 'var(--space-md)' }}>Recent Orders</h3>
             {orders.length > 0 ? (
@@ -439,14 +499,18 @@ export default function BuyerDashboard() {
                   };
                   const color = statusColors[p.status] || 'var(--color-accent)';
 
+                  const isFixed = (p.budgetType || p.budget_type) === 'fixed';
+                  const fixedVal = p.fixedBudget ?? p.fixed_budget ?? p.budget;
+                  const minVal = p.budgetMin ?? p.budget_min;
+                  const maxVal = p.budgetMax ?? p.budget_max;
                   const formattedBudget =
-                    p.budgetType === 'fixed'
-                      ? p.fixedBudget
-                        ? `$${p.fixedBudget}`
-                        : p.budgetMin && p.budgetMax
-                        ? `$${p.budgetMin} – $${p.budgetMax}`
-                        : `$${p.budgetMin || p.budgetMax || 'Negotiable'}`
-                      : `$${p.budgetMin || 0} – $${p.budgetMax || 0}/hr`;
+                    isFixed
+                      ? fixedVal
+                        ? `$${fixedVal}`
+                        : minVal && maxVal
+                        ? `$${minVal} – $${maxVal}`
+                        : `$${minVal || maxVal || 'Negotiable'}`
+                      : `$${minVal || 0} – $${maxVal || 0}/hr`;
 
                   return (
                     <div
@@ -500,8 +564,8 @@ export default function BuyerDashboard() {
                       {/* Footer Actions */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                         <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', display: 'flex', gap: 16 }}>
-                          <span><strong>{p.proposalCount}</strong> Proposals Received</span>
-                          <span>Timeline: <strong>{p.estimatedDuration}</strong></span>
+                          <span><strong>{p.proposalCount ?? p.proposal_count ?? 0}</strong> Proposals Received</span>
+                          <span>Timeline: <strong>{p.estimatedDuration || p.estimated_duration || 'Flexible'}</strong></span>
                         </div>
 
                         <div style={{ display: 'flex', gap: 8 }}>
@@ -512,7 +576,7 @@ export default function BuyerDashboard() {
                             style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                           >
                             <Users size={14} />
-                            <span>Review Proposals ({p.proposalCount})</span>
+                            <span>Review Proposals ({p.proposalCount ?? p.proposal_count ?? 0})</span>
                           </Button>
                           <Link
                             to={`/projects/${p.id}`}

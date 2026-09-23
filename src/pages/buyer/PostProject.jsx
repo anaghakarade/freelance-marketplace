@@ -275,7 +275,7 @@ export default function PostProject() {
                   {submittedProject.title}
                 </h2>
                 <div style={{ fontSize: '0.88rem', color: 'var(--color-text-light)', marginTop: '4px' }}>
-                  Budget: ${submittedProject.fixedBudget || submittedProject.budgetMin || submittedProject.budget} • Status: <strong style={{ color: 'var(--color-accent)' }}>Live / Open</strong>
+                  Budget: ${submittedProject.fixedBudget || submittedProject.fixed_budget || submittedProject.budgetMin || submittedProject.budget_min || submittedProject.budget} • Status: <strong style={{ color: 'var(--color-accent)' }}>Live / Open</strong>
                 </div>
               </div>
 
