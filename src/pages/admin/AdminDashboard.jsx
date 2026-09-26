@@ -33,6 +33,8 @@ const AdminDashboard = () => {
   // ─── Server-driven state ────────────────────────────────────────────────
   const [analytics, setAnalytics] = useState(null);
   const [users, setUsers] = useState({ users: [], total: 0, page: 1, limit: 20 });
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState('');
   const [services, setServices] = useState({ services: [], total: 0, page: 1, limit: 20 });
   const [projects, setProjects] = useState({ projects: [], total: 0, page: 1, limit: 20 });
   const [reports, setReports] = useState({ reports: [], total: 0, page: 1, limit: 20 });
@@ -69,10 +71,24 @@ const AdminDashboard = () => {
   }, []);
 
   const loadUsers = useCallback(async (page = 1) => {
+    setUsersLoading(true);
+    setUsersError('');
     try {
       const data = await adminApi.listUsers({ page, search: userSearch, role: userRoleFilter, status: userStatusFilter });
-      setUsers(data || { users: [], total: 0, page, limit: 20 });
-    } catch (e) { console.error('[Admin] Users error:', e); }
+      const list = Array.isArray(data?.users) ? data.users : [];
+      setUsers({
+        users: list,
+        total: Number.isFinite(data?.total) ? data.total : list.length,
+        page: data?.page || page,
+        limit: data?.limit || 20,
+      });
+    } catch (e) {
+      console.error('[Admin] Users error:', e);
+      setUsers({ users: [], total: 0, page, limit: 20 });
+      setUsersError(e.message || 'Unable to load users.');
+    } finally {
+      setUsersLoading(false);
+    }
   }, [userSearch, userRoleFilter, userStatusFilter]);
 
   const loadServices = useCallback(async (page = 1) => {
@@ -390,13 +406,22 @@ const AdminDashboard = () => {
               </div>
               <Select value={userRoleFilter} onChange={e => { setUserRoleFilter(e.target.value); }} options={[{ value: '', label: 'All Roles' }, { value: 'buyer', label: 'Buyer' }, { value: 'seller', label: 'Seller' }, { value: 'admin', label: 'Admin' }]} />
               <Select value={userStatusFilter} onChange={e => { setUserStatusFilter(e.target.value); }} options={[{ value: '', label: 'All Status' }, { value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
-              <Button variant="primary" size="sm" onClick={() => loadUsers(1)}><Search size={14} /> Search</Button>
+              <Button variant="primary" size="sm" onClick={() => loadUsers(1)} disabled={usersLoading}><Search size={14} /> Search</Button>
             </div>
+            {usersError && (
+              <div className="flex items-center justify-between gap-sm" style={{ marginBottom: 'var(--space-md)', padding: 'var(--space-sm) var(--space-md)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.08)', color: '#fca5a5', fontSize: 'var(--text-sm)' }}>
+                <span className="flex items-center gap-xs"><AlertTriangle size={14} /> {usersError}</span>
+                <Button variant="outline" size="sm" onClick={() => loadUsers(users.page || 1)}>Retry</Button>
+              </div>
+            )}
             <div className="data-table-wrapper">
               <table className="data-table">
                 <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Joined</th><th>Status</th><th>Activity</th><th>Actions</th></tr></thead>
                 <tbody>
-                  {(users.users || []).map(u => (
+                  {usersLoading && (
+                    <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--space-xl)' }}>Loading users...</td></tr>
+                  )}
+                  {!usersLoading && (users.users || []).map(u => (
                     <tr key={u.id}>
                       <td>
                         <div className="flex items-center gap-xs">
@@ -428,7 +453,8 @@ const AdminDashboard = () => {
                       </td>
                     </tr>
                   ))}
-                  {(!users.users || users.users.length === 0) && <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--space-xl)' }}>No users found.</td></tr>}
+                  {!usersLoading && !usersError && (!users.users || users.users.length === 0) && <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--space-xl)' }}>No users found.</td></tr>}
+                  {!usersLoading && usersError && (!users.users || users.users.length === 0) && <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 'var(--space-xl)' }}>Users could not be loaded.</td></tr>}
                 </tbody>
               </table>
             </div>

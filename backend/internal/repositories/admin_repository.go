@@ -73,9 +73,21 @@ func (r *adminRepository) ListUsers(ctx context.Context, search, role, status st
 	}
 
 	if role != "" && role != "all" {
-		where = append(where, fmt.Sprintf("u.role = $%d", idx))
-		args = append(args, role)
-		idx++
+		switch strings.ToLower(strings.TrimSpace(role)) {
+		case "seller", "freelancer":
+			// Seeded sellers are stored as freelancer; registered sellers as seller.
+			where = append(where, fmt.Sprintf("u.role IN ($%d, $%d)", idx, idx+1))
+			args = append(args, "seller", "freelancer")
+			idx += 2
+		case "buyer", "client":
+			where = append(where, fmt.Sprintf("u.role IN ($%d, $%d)", idx, idx+1))
+			args = append(args, "buyer", "client")
+			idx += 2
+		default:
+			where = append(where, fmt.Sprintf("u.role = $%d", idx))
+			args = append(args, role)
+			idx++
+		}
 	}
 
 	if status != "" && status != "all" {
@@ -96,13 +108,17 @@ func (r *adminRepository) ListUsers(ctx context.Context, search, role, status st
 	}
 
 	query := fmt.Sprintf(`
-		SELECT u.id, u.name, u.email, u.role, u.account_type, u.avatar, u.title,
-		       u.location, u.rating, u.reviews_count, u.skills, u.about, u.languages,
-		       u.completed_projects, u.starting_price, u.status, u.is_active,
+		SELECT u.id, u.name, u.email, u.role, COALESCE(u.account_type, 'individual'),
+		       COALESCE(u.avatar, ''), COALESCE(u.title, ''), COALESCE(u.location, ''),
+		       COALESCE(u.rating, 0), COALESCE(u.reviews_count, 0),
+		       COALESCE(u.skills, '[]'::jsonb), COALESCE(u.about, ''),
+		       COALESCE(u.languages, '[]'::jsonb),
+		       COALESCE(u.completed_projects, 0), COALESCE(u.starting_price, 0),
+		       COALESCE(u.status, 'active'), COALESCE(u.is_active, true),
 		       u.created_at, u.updated_at,
 		       (SELECT COUNT(*) FROM services s WHERE s.seller_id = u.id) AS service_count,
 		       (SELECT COUNT(*) FROM projects p WHERE p.buyer_id = u.id) AS project_count,
-		       (SELECT COUNT(*) FROM contracts c WHERE c.client_id = u.id OR c.freelancer_id = u.id) AS contract_count
+		       (SELECT COUNT(*) FROM contracts c WHERE c.buyer_id = u.id OR c.freelancer_id = u.id) AS contract_count
 		FROM users u
 		%s
 		ORDER BY u.created_at DESC
@@ -117,7 +133,7 @@ func (r *adminRepository) ListUsers(ctx context.Context, search, role, status st
 	}
 	defer rows.Close()
 
-	var users []*models.AdminUserItem
+	users := make([]*models.AdminUserItem, 0)
 	for rows.Next() {
 		var item models.AdminUserItem
 		var skillsJSON, languagesJSON []byte
@@ -141,6 +157,9 @@ func (r *adminRepository) ListUsers(ctx context.Context, search, role, status st
 
 		users = append(users, &item)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to read users: %w", err)
+	}
 
 	return users, total, nil
 }
@@ -152,13 +171,17 @@ func (r *adminRepository) GetUserByID(ctx context.Context, id string) (*models.A
 	}
 
 	query := `
-		SELECT u.id, u.name, u.email, u.role, u.account_type, u.avatar, u.title,
-		       u.location, u.rating, u.reviews_count, u.skills, u.about, u.languages,
-		       u.completed_projects, u.starting_price, u.status, u.is_active,
+		SELECT u.id, u.name, u.email, u.role, COALESCE(u.account_type, 'individual'),
+		       COALESCE(u.avatar, ''), COALESCE(u.title, ''), COALESCE(u.location, ''),
+		       COALESCE(u.rating, 0), COALESCE(u.reviews_count, 0),
+		       COALESCE(u.skills, '[]'::jsonb), COALESCE(u.about, ''),
+		       COALESCE(u.languages, '[]'::jsonb),
+		       COALESCE(u.completed_projects, 0), COALESCE(u.starting_price, 0),
+		       COALESCE(u.status, 'active'), COALESCE(u.is_active, true),
 		       u.created_at, u.updated_at,
 		       (SELECT COUNT(*) FROM services s WHERE s.seller_id = u.id) AS service_count,
 		       (SELECT COUNT(*) FROM projects p WHERE p.buyer_id = u.id) AS project_count,
-		       (SELECT COUNT(*) FROM contracts c WHERE c.client_id = u.id OR c.freelancer_id = u.id) AS contract_count
+		       (SELECT COUNT(*) FROM contracts c WHERE c.buyer_id = u.id OR c.freelancer_id = u.id) AS contract_count
 		FROM users u
 		WHERE u.id = $1;
 	`
