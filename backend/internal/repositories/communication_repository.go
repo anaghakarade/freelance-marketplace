@@ -115,7 +115,14 @@ func (r *communicationRepository) CreateOrGetConversation(c context.Context, id,
 	var existing string
 	e = tx.QueryRowContext(c, `SELECT id FROM conversations WHERE project_id=$1 AND participant_key=$2`, project, key).Scan(&existing)
 	if e == nil {
-		tx.Commit()
+		for _, u := range []string{buyer, freelancer} {
+			if _, e = tx.ExecContext(c, `INSERT INTO conversation_participants(conversation_id,user_id) VALUES($1,$2) ON CONFLICT (conversation_id, user_id) DO NOTHING`, existing, u); e != nil {
+				return nil, e
+			}
+		}
+		if e = tx.Commit(); e != nil {
+			return nil, e
+		}
 		return &models.Conversation{
 			ID:        existing,
 			ProjectID: project,
@@ -132,7 +139,7 @@ func (r *communicationRepository) CreateOrGetConversation(c context.Context, id,
 		return nil, e
 	}
 	for _, u := range []string{buyer, freelancer} {
-		if _, e = tx.ExecContext(c, `INSERT INTO conversation_participants(conversation_id,user_id) VALUES($1,$2)`, id, u); e != nil {
+		if _, e = tx.ExecContext(c, `INSERT INTO conversation_participants(conversation_id,user_id) VALUES($1,$2) ON CONFLICT (conversation_id, user_id) DO NOTHING`, id, u); e != nil {
 			return nil, e
 		}
 	}
@@ -150,7 +157,23 @@ func (r *communicationRepository) CreateOrGetConversation(c context.Context, id,
 }
 func (r *communicationRepository) isParticipant(c context.Context, id, u string) bool {
 	var x bool
-	return r.db.QueryRowContext(c, `SELECT EXISTS(SELECT 1 FROM conversation_participants WHERE conversation_id=$1 AND user_id=$2)`, id, u).Scan(&x) == nil && x
+	if r.db.QueryRowContext(c, `SELECT EXISTS(SELECT 1 FROM conversation_participants WHERE conversation_id=$1 AND user_id=$2)`, id, u).Scan(&x) == nil && x {
+		return true
+	}
+	// Fallback/heal: If user is party to the contract for this conversation's project, ensure participant and allow
+	var isContractParty bool
+	err := r.db.QueryRowContext(c, `
+		SELECT EXISTS(
+			SELECT 1 FROM conversations conv
+			JOIN contracts c ON c.project_id = conv.project_id
+			WHERE conv.id = $1 AND (c.buyer_id = $2 OR c.freelancer_id = $2)
+		)
+	`, id, u).Scan(&isContractParty)
+	if err == nil && isContractParty {
+		_, _ = r.db.ExecContext(c, `INSERT INTO conversation_participants (conversation_id, user_id) VALUES ($1, $2) ON CONFLICT (conversation_id, user_id) DO NOTHING`, id, u)
+		return true
+	}
+	return false
 }
 func (r *communicationRepository) Conversations(c context.Context, u string) ([]models.Conversation, error) {
 	if e := r.available(); e != nil {
@@ -173,10 +196,18 @@ func (r *communicationRepository) Conversations(c context.Context, u string) ([]
 
 	_, _ = r.db.ExecContext(c, `
 		INSERT INTO conversation_participants (conversation_id, user_id, joined_at)
-		SELECT conv.id, p.user_id, c.created_at
+		SELECT conv.id, c.buyer_id, c.created_at
 		FROM contracts c
 		JOIN conversations conv ON conv.project_id = c.project_id AND conv.participant_key = (CASE WHEN c.buyer_id < c.freelancer_id THEN c.buyer_id || ':' || c.freelancer_id ELSE c.freelancer_id || ':' || c.buyer_id END)
-		CROSS JOIN (VALUES (c.buyer_id), (c.freelancer_id)) AS p(user_id)
+		WHERE (c.buyer_id = $1 OR c.freelancer_id = $1)
+		ON CONFLICT (conversation_id, user_id) DO NOTHING;
+	`, u)
+
+	_, _ = r.db.ExecContext(c, `
+		INSERT INTO conversation_participants (conversation_id, user_id, joined_at)
+		SELECT conv.id, c.freelancer_id, c.created_at
+		FROM contracts c
+		JOIN conversations conv ON conv.project_id = c.project_id AND conv.participant_key = (CASE WHEN c.buyer_id < c.freelancer_id THEN c.buyer_id || ':' || c.freelancer_id ELSE c.freelancer_id || ':' || c.buyer_id END)
 		WHERE (c.buyer_id = $1 OR c.freelancer_id = $1)
 		ON CONFLICT (conversation_id, user_id) DO NOTHING;
 	`, u)
@@ -274,12 +305,15 @@ func (r *communicationRepository) SendMessage(c context.Context, m *models.Messa
 	if !r.isParticipant(c, m.ConversationID, m.SenderID) {
 		return ErrNotParticipant
 	}
+	now := time.Now().UTC()
+	m.CreatedAt = now
+	m.UpdatedAt = now
 	tx, e := r.db.BeginTx(c, nil)
 	if e != nil {
 		return e
 	}
 	defer tx.Rollback()
-	if _, e = tx.ExecContext(c, `INSERT INTO messages(id,conversation_id,sender_id,message) VALUES($1,$2,$3,$4)`, m.ID, m.ConversationID, m.SenderID, m.Message); e != nil {
+	if _, e = tx.ExecContext(c, `INSERT INTO messages(id,conversation_id,sender_id,message,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6)`, m.ID, m.ConversationID, m.SenderID, m.Message, now, now); e != nil {
 		return e
 	}
 	_, e = tx.ExecContext(c, `UPDATE conversations SET updated_at=NOW() WHERE id=$1`, m.ConversationID)

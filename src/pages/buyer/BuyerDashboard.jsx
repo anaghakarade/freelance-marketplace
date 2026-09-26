@@ -430,13 +430,13 @@ export default function BuyerDashboard() {
       return;
     }
 
-    let targetConvId = selectedChat.conversationId;
+    let targetConvId = selectedChat.conversationId || (selectedChat.id?.startsWith('cnv_') ? selectedChat.id : null);
     if (!targetConvId && selectedChat.projectId && selectedChat.freelancerId) {
       try {
         const created = await communicationApi.createConversation(selectedChat.projectId, selectedChat.freelancerId);
-        targetConvId = created?.data?.id || created?.id;
+        targetConvId = created?.id || created?.data?.id;
         if (targetConvId) {
-          setSelectedChat(prev => ({ ...prev, conversationId: targetConvId }));
+          setSelectedChat(prev => ({ ...prev, conversationId: targetConvId, id: targetConvId }));
         }
       } catch (err) {
         console.error('[BuyerDashboard] Could not create conversation:', err);
@@ -452,6 +452,7 @@ export default function BuyerDashboard() {
       const res = await communicationApi.messages(targetConvId);
       const list = res?.messages || (Array.isArray(res) ? res : []);
       setChatMessages(list.slice().reverse());
+      fetchConversations();
     } catch (err) {
       console.error('[BuyerDashboard] Failed to send message:', err);
       alert('Failed to send message: ' + (err.message || 'Unknown error'));

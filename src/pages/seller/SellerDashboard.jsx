@@ -647,13 +647,13 @@ export default function SellerDashboard() {
       return;
     }
 
-    let targetConvId = selectedChat.conversationId;
-    if (!targetConvId && selectedChat.projectId) {
+    let targetConvId = selectedChat.conversationId || (selectedChat.id?.startsWith('cnv_') ? selectedChat.id : null);
+    if (!targetConvId && selectedChat.projectId && selectedChat.freelancerId) {
       try {
-        const created = await communicationApi.createConversation(selectedChat.projectId, currentUser?.id);
-        targetConvId = created?.data?.id || created?.id;
+        const created = await communicationApi.createConversation(selectedChat.projectId, selectedChat.freelancerId);
+        targetConvId = created?.id || created?.data?.id;
         if (targetConvId) {
-          setSelectedChat(prev => ({ ...prev, conversationId: targetConvId }));
+          setSelectedChat(prev => ({ ...prev, conversationId: targetConvId, id: targetConvId }));
         }
       } catch (err) {
         console.error('[SellerDashboard] Could not create conversation:', err);
@@ -669,6 +669,7 @@ export default function SellerDashboard() {
       const res = await communicationApi.messages(targetConvId);
       const list = res?.messages || (Array.isArray(res) ? res : []);
       setChatMessages(list.slice().reverse());
+      fetchConversations();
     } catch (err) {
       console.error('[SellerDashboard] Failed to send message:', err);
       alert('Failed to send message: ' + (err.message || 'Unknown error'));
