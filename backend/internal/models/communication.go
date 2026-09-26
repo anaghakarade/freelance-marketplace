@@ -47,7 +47,10 @@ type ActivityEvent struct {
 	Metadata    map[string]interface{} `json:"metadata"`
 	CreatedAt   time.Time              `json:"createdAt"`
 }
-type CreateConversationRequest struct{ ProjectID, FreelancerID string }
+type CreateConversationRequest struct {
+	ProjectID    string `json:"projectId"`
+	FreelancerID string `json:"freelancerId"`
+}
 type CreateMessageRequest struct {
 	Message string `json:"message" binding:"required"`
 }

@@ -434,6 +434,28 @@ func (r *proposalRepository) AcceptProposalTx(ctx context.Context, proposalID st
 		return "", fmt.Errorf("failed to create contract in tx: %w", err)
 	}
 
+	// 7. Ensure a conversation exists for this project between buyer and freelancer
+	convID := fmt.Sprintf("cnv_%d_%d", time.Now().UnixMilli(), atomic.AddUint64(&idCounter, 1))
+	partKey := buyerID + ":" + freelancerID
+	if buyerID > freelancerID {
+		partKey = freelancerID + ":" + buyerID
+	}
+	_, _ = tx.ExecContext(ctx, `
+		INSERT INTO conversations (id, project_id, participant_key, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $4)
+		ON CONFLICT (project_id, participant_key) DO NOTHING
+	`, convID, projectID, partKey, now)
+	var activeConvID string
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM conversations WHERE project_id = $1 AND participant_key = $2`, projectID, partKey).Scan(&activeConvID); err == nil {
+		for _, u := range []string{buyerID, freelancerID} {
+			_, _ = tx.ExecContext(ctx, `
+				INSERT INTO conversation_participants (conversation_id, user_id, joined_at)
+				VALUES ($1, $2, $3)
+				ON CONFLICT (conversation_id, user_id) DO NOTHING
+			`, activeConvID, u, now)
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("failed to commit accept proposal and contract tx: %w", err)
 	}

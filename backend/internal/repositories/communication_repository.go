@@ -116,7 +116,14 @@ func (r *communicationRepository) CreateOrGetConversation(c context.Context, id,
 	e = tx.QueryRowContext(c, `SELECT id FROM conversations WHERE project_id=$1 AND participant_key=$2`, project, key).Scan(&existing)
 	if e == nil {
 		tx.Commit()
-		return &models.Conversation{ID: existing, ProjectID: project}, nil
+		return &models.Conversation{
+			ID:        existing,
+			ProjectID: project,
+			Participants: []models.ConversationParticipant{
+				{ConversationID: existing, UserID: buyer},
+				{ConversationID: existing, UserID: freelancer},
+			},
+		}, nil
 	}
 	if !errors.Is(e, sql.ErrNoRows) {
 		return nil, e
@@ -132,7 +139,14 @@ func (r *communicationRepository) CreateOrGetConversation(c context.Context, id,
 	if e = tx.Commit(); e != nil {
 		return nil, e
 	}
-	return &models.Conversation{ID: id, ProjectID: project}, nil
+	return &models.Conversation{
+		ID:        id,
+		ProjectID: project,
+		Participants: []models.ConversationParticipant{
+			{ConversationID: id, UserID: buyer},
+			{ConversationID: id, UserID: freelancer},
+		},
+	}, nil
 }
 func (r *communicationRepository) isParticipant(c context.Context, id, u string) bool {
 	var x bool
@@ -142,6 +156,31 @@ func (r *communicationRepository) Conversations(c context.Context, u string) ([]
 	if e := r.available(); e != nil {
 		return nil, e
 	}
+
+	// Ensure conversations exist for all contracts user is a party to
+	_, _ = r.db.ExecContext(c, `
+		INSERT INTO conversations (id, project_id, participant_key, created_at, updated_at)
+		SELECT 
+			'cnv_' || substr(md5(c.id || c.project_id), 1, 16),
+			c.project_id,
+			CASE WHEN c.buyer_id < c.freelancer_id THEN c.buyer_id || ':' || c.freelancer_id ELSE c.freelancer_id || ':' || c.buyer_id END,
+			c.created_at,
+			c.updated_at
+		FROM contracts c
+		WHERE (c.buyer_id = $1 OR c.freelancer_id = $1)
+		ON CONFLICT (project_id, participant_key) DO NOTHING;
+	`, u)
+
+	_, _ = r.db.ExecContext(c, `
+		INSERT INTO conversation_participants (conversation_id, user_id, joined_at)
+		SELECT conv.id, p.user_id, c.created_at
+		FROM contracts c
+		JOIN conversations conv ON conv.project_id = c.project_id AND conv.participant_key = (CASE WHEN c.buyer_id < c.freelancer_id THEN c.buyer_id || ':' || c.freelancer_id ELSE c.freelancer_id || ':' || c.buyer_id END)
+		CROSS JOIN (VALUES (c.buyer_id), (c.freelancer_id)) AS p(user_id)
+		WHERE (c.buyer_id = $1 OR c.freelancer_id = $1)
+		ON CONFLICT (conversation_id, user_id) DO NOTHING;
+	`, u)
+
 	rows, e := r.db.QueryContext(c, `SELECT c.id,c.project_id,c.created_at,c.updated_at,(SELECT COUNT(*) FROM messages m WHERE m.conversation_id=c.id AND m.created_at>COALESCE(cp.last_read_at,'epoch')) FROM conversations c JOIN conversation_participants cp ON cp.conversation_id=c.id WHERE cp.user_id=$1 ORDER BY c.updated_at DESC`, u)
 	if e != nil {
 		return nil, e
@@ -155,7 +194,31 @@ func (r *communicationRepository) Conversations(c context.Context, u string) ([]
 		}
 		out = append(out, v)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range out {
+		conv := &out[i]
+		partRows, err := r.db.QueryContext(c, `SELECT cp.conversation_id, cp.user_id, COALESCE(u.name, ''), cp.joined_at, cp.last_read_at FROM conversation_participants cp LEFT JOIN users u ON u.id = cp.user_id WHERE cp.conversation_id = $1`, conv.ID)
+		if err == nil {
+			var parts []models.ConversationParticipant
+			for partRows.Next() {
+				var p models.ConversationParticipant
+				if scanErr := partRows.Scan(&p.ConversationID, &p.UserID, &p.Name, &p.JoinedAt, &p.LastReadAt); scanErr == nil {
+					parts = append(parts, p)
+				}
+			}
+			partRows.Close()
+			conv.Participants = parts
+		}
+		var lm models.Message
+		if err := r.db.QueryRowContext(c, `SELECT id, conversation_id, sender_id, message, created_at, updated_at FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 1`, conv.ID).Scan(&lm.ID, &lm.ConversationID, &lm.SenderID, &lm.Message, &lm.CreatedAt, &lm.UpdatedAt); err == nil {
+			conv.LatestMessage = &lm
+		}
+	}
+
+	return out, nil
 }
 func (r *communicationRepository) Conversation(c context.Context, id, u string) (*models.Conversation, error) {
 	if e := r.available(); e != nil {
@@ -167,6 +230,18 @@ func (r *communicationRepository) Conversation(c context.Context, id, u string) 
 	v := &models.Conversation{}
 	if e := r.db.QueryRowContext(c, `SELECT id,project_id,created_at,updated_at FROM conversations WHERE id=$1`, id).Scan(&v.ID, &v.ProjectID, &v.CreatedAt, &v.UpdatedAt); e != nil {
 		return nil, e
+	}
+	partRows, err := r.db.QueryContext(c, `SELECT cp.conversation_id, cp.user_id, COALESCE(u.name, ''), cp.joined_at, cp.last_read_at FROM conversation_participants cp LEFT JOIN users u ON u.id = cp.user_id WHERE cp.conversation_id = $1`, v.ID)
+	if err == nil {
+		var parts []models.ConversationParticipant
+		for partRows.Next() {
+			var p models.ConversationParticipant
+			if scanErr := partRows.Scan(&p.ConversationID, &p.UserID, &p.Name, &p.JoinedAt, &p.LastReadAt); scanErr == nil {
+				parts = append(parts, p)
+			}
+		}
+		partRows.Close()
+		v.Participants = parts
 	}
 	return v, nil
 }
