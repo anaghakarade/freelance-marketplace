@@ -428,3 +428,176 @@ func TestContractService_MilestoneLifecycleAndCompletion(t *testing.T) {
 		t.Errorf("expected 100%% progress, got %d%%", progressFinal.ProgressPercentage)
 	}
 }
+
+// TestContractService_SubmitMilestone_RBAC covers the exact 403 scenario from the bug report:
+// A stranger or the buyer must be rejected; the assigned freelancer must succeed.
+func TestContractService_SubmitMilestone_RBAC(t *testing.T) {
+	ctx := context.Background()
+
+	contractRepo := newMockContractRepo()
+	milestoneRepo := newMockMilestoneRepo()
+	milestoneRepo.contractRepo = contractRepo
+
+	svc := &contractService{
+		contractRepo:  contractRepo,
+		milestoneRepo: milestoneRepo,
+		projectRepo:   nil,
+	}
+
+	// Seed a contract with a known buyer and freelancer.
+	const (
+		buyerID      = "usr_buyer_rbac"
+		freelancerID = "usr_free_rbac"
+		strangerID   = "usr_stranger_rbac"
+		contractID   = "ctr_rbac_1"
+		milestoneID  = "mls_rbac_1"
+	)
+
+	contractRepo.contracts[contractID] = &models.Contract{
+		ID:           contractID,
+		ProjectID:    "prj_rbac_1",
+		ProposalID:   "prop_rbac_1",
+		BuyerID:      buyerID,
+		FreelancerID: freelancerID,
+		Title:        "RBAC Test Contract",
+		AgreedBudget: 500,
+		Currency:     "USD",
+		Status:       models.ContractStatusActive,
+		CreatedAt:    time.Now().UTC(),
+	}
+
+	milestoneRepo.milestones[milestoneID] = &models.Milestone{
+		ID:             milestoneID,
+		ContractID:     contractID,
+		Title:          "RBAC Milestone",
+		SequenceNumber: 1,
+		Amount:         500,
+		Status:         models.MilestoneStatusPending,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}
+
+	req := models.MilestoneSubmissionRequest{
+		Message: "Deliverable complete.",
+	}
+
+	// 1. Stranger (unassigned third party) must get 403 on StartMilestone.
+	if err := svc.StartMilestone(ctx, milestoneID, strangerID, "freelancer"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("stranger StartMilestone: expected ErrForbidden, got: %v", err)
+	}
+
+	// 2. Buyer must get 403 on StartMilestone (not their role).
+	if err := svc.StartMilestone(ctx, milestoneID, buyerID, "buyer"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("buyer StartMilestone: expected ErrForbidden, got: %v", err)
+	}
+
+	// Transition to in_progress as the legitimate freelancer.
+	if err := svc.StartMilestone(ctx, milestoneID, freelancerID, "freelancer"); err != nil {
+		t.Fatalf("assigned freelancer StartMilestone failed: %v", err)
+	}
+
+	// 3. Stranger must get 403 on SubmitMilestone.
+	if _, err := svc.SubmitMilestone(ctx, milestoneID, strangerID, "freelancer", req); !errors.Is(err, ErrForbidden) {
+		t.Errorf("stranger SubmitMilestone: expected ErrForbidden, got: %v", err)
+	}
+
+	// 4. Buyer must get 403 on SubmitMilestone (buyer is not the freelancer).
+	if _, err := svc.SubmitMilestone(ctx, milestoneID, buyerID, "buyer", req); !errors.Is(err, ErrForbidden) {
+		t.Errorf("buyer SubmitMilestone: expected ErrForbidden, got: %v", err)
+	}
+
+	// 5. Assigned freelancer must succeed.
+	sub, err := svc.SubmitMilestone(ctx, milestoneID, freelancerID, "freelancer", req)
+	if err != nil {
+		t.Fatalf("assigned freelancer SubmitMilestone failed: %v", err)
+	}
+	if sub.Status != models.SubmissionStatusSubmitted {
+		t.Errorf("expected submitted status, got %s", sub.Status)
+	}
+
+	// 6. Milestone status must be 'submitted' after the freelancer submits.
+	m, _ := milestoneRepo.GetByID(ctx, milestoneID)
+	if m.Status != models.MilestoneStatusSubmitted {
+		t.Errorf("expected milestone status 'submitted', got '%s'", m.Status)
+	}
+
+	// 7. SubmittedMilestones count must be reflected in ContractProgress (drives
+	//    the 'N deliverables awaiting review' badge on the Buyer Dashboard).
+	progress, err := svc.CalculateContractProgress(ctx, contractID)
+	if err != nil {
+		t.Fatalf("CalculateContractProgress failed: %v", err)
+	}
+	if progress.SubmittedMilestones != 1 {
+		t.Errorf("expected 1 submitted milestone in progress, got %d", progress.SubmittedMilestones)
+	}
+
+	// 8. Buyer can approve the submitted milestone.
+	if err := svc.ApproveMilestone(ctx, milestoneID, buyerID, "buyer", "LGTM"); err != nil {
+		t.Fatalf("buyer ApproveMilestone failed: %v", err)
+	}
+
+	// 9. Freelancer must get 403 trying to approve their own work.
+	// (Re-set milestone status to submitted for this check.)
+	milestoneRepo.milestones[milestoneID].Status = models.MilestoneStatusSubmitted
+	if err := svc.ApproveMilestone(ctx, milestoneID, freelancerID, "freelancer", "I approve my own work"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("freelancer ApproveMilestone: expected ErrForbidden, got: %v", err)
+	}
+}
+
+// TestContractService_SubmittedMilestonesInProgress verifies that the
+// SubmittedMilestones field of ContractProgress is correctly incremented,
+// as it drives the buyer-dashboard "N deliverables awaiting review" badge.
+func TestContractService_SubmittedMilestonesInProgress(t *testing.T) {
+	ctx := context.Background()
+
+	contractRepo := newMockContractRepo()
+	milestoneRepo := newMockMilestoneRepo()
+	milestoneRepo.contractRepo = contractRepo
+
+	svc := &contractService{
+		contractRepo:  contractRepo,
+		milestoneRepo: milestoneRepo,
+		projectRepo:   nil,
+	}
+
+	contractRepo.contracts["ctr_prog_1"] = &models.Contract{
+		ID:           "ctr_prog_1",
+		BuyerID:      "buyer_prog",
+		FreelancerID: "free_prog",
+		Status:       models.ContractStatusActive,
+		CreatedAt:    time.Now().UTC(),
+	}
+
+	// Add 3 milestones in different states.
+	for i, status := range []string{
+		models.MilestoneStatusSubmitted,
+		models.MilestoneStatusSubmitted,
+		models.MilestoneStatusInProgress,
+	} {
+		id := "mls_prog_" + string(rune('a'+i))
+		milestoneRepo.milestones[id] = &models.Milestone{
+			ID:         id,
+			ContractID: "ctr_prog_1",
+			Title:      "Milestone " + string(rune('A'+i)),
+			Amount:     100,
+			Status:     status,
+			CreatedAt:  time.Now().UTC(),
+			UpdatedAt:  time.Now().UTC(),
+		}
+	}
+
+	progress, err := svc.CalculateContractProgress(ctx, "ctr_prog_1")
+	if err != nil {
+		t.Fatalf("CalculateContractProgress error: %v", err)
+	}
+	if progress.SubmittedMilestones != 2 {
+		t.Errorf("expected 2 submitted milestones, got %d", progress.SubmittedMilestones)
+	}
+	if progress.InProgressMilestones != 1 {
+		t.Errorf("expected 1 in_progress milestone, got %d", progress.InProgressMilestones)
+	}
+	if progress.TotalMilestones != 3 {
+		t.Errorf("expected 3 total milestones, got %d", progress.TotalMilestones)
+	}
+}
+

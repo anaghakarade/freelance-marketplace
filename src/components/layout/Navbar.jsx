@@ -107,9 +107,9 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleRoleSwitch = (e) => {
+  const handleRoleSwitch = async (e) => {
     const role = e.target.value;
-    authService.switchRole(role);
+    await authService.switchRole(role);
     setUserDropdownOpen(false);
     if (role === 'admin') navigate('/admin');
     else if (role === 'buyer') navigate('/buyer');
@@ -129,13 +129,13 @@ const Navbar = () => {
     }
   };
 
-  const handleBecomeFreelancer = () => {
+  const handleBecomeFreelancer = async () => {
     if (!currentUser) {
       navigate('/register?role=freelancer');
     } else if (currentUser.role === 'freelancer') {
       navigate('/seller');
     } else {
-      authService.switchRole('freelancer');
+      await authService.switchRole('freelancer');
       navigate('/seller');
     }
   };

@@ -87,10 +87,21 @@ export const authService = {
   },
 
   /**
-   * Quick role switcher for prototype / demo mode
-   * Switches to the first user with the given role in the seed data
+   * Quick role switcher for prototype / demo mode.
+   *
+   * Performs a real backend login (seed password 'workstream123') for the
+   * target demo user so that 'workstream_token' (JWT) is fully in sync with
+   * 'workstream_current_user'.  Without this, the old buyer JWT would still
+   * be sent on API requests while the UI showed a freelancer profile —
+   * causing 403 Forbidden on every freelancer-only endpoint.
+   *
+   * Falls back to a localStorage-only profile swap when the backend is
+   * unreachable, and clears the stale token so it cannot cause auth mismatches.
+   *
+   * @param {string} role - 'buyer' | 'freelancer' | 'seller' | 'admin'
+   * @returns {Promise<void>}
    */
-  switchRole: (role) => {
+  switchRole: async (role) => {
     const users = authService.getUsers();
     let targetUser;
     if (role === 'admin') {
@@ -102,9 +113,26 @@ export const authService = {
       targetUser = users.find(u => u.role === 'freelancer' || u.role === 'seller');
     }
 
-    if (targetUser) {
-      authService.setCurrentUser(targetUser);
+    if (!targetUser) return;
+
+    // ── Attempt a real backend login to sync the JWT token ──────────────────
+    try {
+      await authService.login(targetUser.email, 'workstream123');
+      // authService.login already stores the token and user — we're done.
+      return;
+    } catch (err) {
+      // Backend returned a real auth error (wrong password seed?): surface it.
+      if (err.message && !err.message.includes('fetch')) {
+        console.error('[AuthService] switchRole backend login failed:', err.message);
+      }
+      // Backend unreachable — fall through to localStorage-only swap.
+      console.warn('[AuthService] switchRole falling back to localStorage swap');
     }
+
+    // ── LocalStorage fallback ────────────────────────────────────────────────
+    // Clear the stale JWT so it cannot be sent to the backend for this user.
+    setStoredToken(null);
+    authService.setCurrentUser(targetUser);
   },
 
   /**

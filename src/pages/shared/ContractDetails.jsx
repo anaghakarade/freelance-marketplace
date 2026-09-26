@@ -155,6 +155,14 @@ export default function ContractDetails() {
 
     setActionLoading(true);
     try {
+      // If the milestone is still 'pending' (e.g. buyer funded it but the
+      // freelancer has not explicitly clicked "Start Milestone" yet), silently
+      // transition it to in_progress before submitting.  This matches the
+      // expected workflow where a funded milestone can be submitted directly.
+      if (submittingWorkForMilestone.status === 'pending') {
+        await contractApi.startMilestone(submittingWorkForMilestone.id);
+      }
+
       await contractApi.submitMilestone(submittingWorkForMilestone.id, {
         message: submissionForm.message.trim(),
         attachmentUrl: submissionForm.attachmentUrl.trim() || null,
@@ -586,14 +594,44 @@ export default function ContractDetails() {
                       {/* FREELANCER ACTIONS */}
                       {isFreelancer && (
                         <>
-                          {(m.status === 'pending' || m.status === 'revision_requested') && (
+                          {/* Show Start Milestone only when pending AND NOT funded (not yet in escrow) */}
+                          {m.status === 'pending' && !payments[m.id] && (
                             <Button
                               variant="primary"
                               size="sm"
                               disabled={actionLoading}
                               onClick={() => handleStartMilestone(m.id)}
                             >
-                              {m.status === 'revision_requested' ? 'Revise & Start Work' : 'Start Milestone'}
+                              Start Milestone
+                            </Button>
+                          )}
+
+                          {/* When pending but FUNDED: show Submit Work directly (auto-starts internally) */}
+                          {m.status === 'pending' && payments[m.id]?.status === 'held' && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              disabled={actionLoading}
+                              onClick={() => {
+                                setSubmittingWorkForMilestone(m);
+                                setSubmissionForm({ message: '', attachmentUrl: '' });
+                              }}
+                              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                            >
+                              <Send size={13} />
+                              <span>Submit Work</span>
+                            </Button>
+                          )}
+
+                          {/* When explicitly revision_requested: start / revise */}
+                          {m.status === 'revision_requested' && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              disabled={actionLoading}
+                              onClick={() => handleStartMilestone(m.id)}
+                            >
+                              Revise &amp; Start Work
                             </Button>
                           )}
 

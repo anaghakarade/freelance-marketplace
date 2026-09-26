@@ -1149,6 +1149,29 @@ export default function BuyerDashboard() {
                         </div>
                       </div>
 
+                      {/* Awaiting review alert badge */}
+                      {(() => {
+                        const submittedCount = c.progress?.submittedMilestones ?? 0;
+                        if (submittedCount === 0) return null;
+                        return (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '8px 14px',
+                            borderRadius: 10,
+                            background: 'rgba(249, 115, 22, 0.12)',
+                            border: '1px solid rgba(249, 115, 22, 0.3)',
+                            color: '#fb923c',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                          }}>
+                            <ThumbsUp size={14} />
+                            <span>{submittedCount} deliverable{submittedCount > 1 ? 's' : ''} awaiting your review</span>
+                          </div>
+                        );
+                      })()}
+
                       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <Button
                           variant="outline"
