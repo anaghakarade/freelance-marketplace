@@ -5,6 +5,7 @@ import { marketplaceService } from '../../services/marketplaceService';
 import { orderService } from '../../services/orderService';
 import { projectApi } from '../../services/api/projectApi';
 import { contractApi } from '../../services/api/contractApi';
+import { communicationApi } from '../../services/api/communicationApi';
 import Avatar from '../../components/ui/Avatar';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -146,6 +147,128 @@ export default function SellerDashboard() {
   const [chatMessage, setChatMessage] = useState('');
   const [speechSuggestion, setSpeechSuggestion] = useState(null);
   const [expandedOrderId, setExpandedOrderId] = useState(null);
+  const [conversationsList, setConversationsList] = useState([]);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+  const [selectedChat, setSelectedChat] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+
+  const fetchConversations = async () => {
+    setLoadingConversations(true);
+    try {
+      let apiConvs = [];
+      try {
+        const res = await communicationApi.conversations();
+        apiConvs = res?.conversations || (Array.isArray(res) ? res : []);
+      } catch (err) {
+        console.warn('[SellerDashboard] Failed to fetch api conversations:', err);
+      }
+
+      let contracts = myContracts;
+      if (!contracts || contracts.length === 0) {
+        try {
+          contracts = await contractApi.getMyContracts();
+          setMyContracts(contracts || []);
+        } catch {
+          contracts = [];
+        }
+      }
+
+      const unified = [];
+      const seenKeys = new Set();
+
+      // 1. Map existing contracts
+      for (const c of (contracts || [])) {
+        if (!c) continue;
+        const projId = c.projectId;
+        const buyerId = c.buyerId || c.clientId;
+        const buyer = c.buyer || c.client || {};
+
+        let matchingConv = apiConvs.find(conv => conv.projectId === projId);
+
+        if (!matchingConv && projId && buyerId) {
+          try {
+            const created = await communicationApi.createConversation(projId, currentUser?.id);
+            matchingConv = created?.data || created;
+          } catch {
+            // best effort
+          }
+        }
+
+        const convKey = matchingConv?.id || `contract_${c.id}`;
+        if (!seenKeys.has(convKey)) {
+          seenKeys.add(convKey);
+          unified.push({
+            id: convKey,
+            conversationId: matchingConv?.id || null,
+            type: 'contract',
+            contractId: c.id,
+            projectId: projId,
+            buyerId: buyerId,
+            clientName: buyer.name || c.buyerName || 'Client',
+            clientAvatar: buyer.avatar || '',
+            serviceTitle: c.title || c.project?.title || 'Project',
+            contractTitle: c.title || 'Contract',
+            unreadCount: matchingConv?.unreadCount || 0,
+            contract: c,
+          });
+        }
+      }
+
+      // 2. Map any remaining API conversations
+      for (const conv of apiConvs) {
+        if (!seenKeys.has(conv.id)) {
+          seenKeys.add(conv.id);
+          const otherParticipant = (conv.participants || []).find(p => p.userId !== currentUser?.id);
+          unified.push({
+            id: conv.id,
+            conversationId: conv.id,
+            type: 'api',
+            projectId: conv.projectId,
+            buyerId: otherParticipant?.userId || '',
+            clientName: otherParticipant?.name || 'Client',
+            clientAvatar: otherParticipant?.avatar || '',
+            serviceTitle: conv.title || conv.projectTitle || 'Project Conversation',
+            contractTitle: conv.title || 'Conversation',
+            unreadCount: conv.unreadCount || 0,
+          });
+        }
+      }
+
+      // 3. Map any legacy orders
+      for (const o of (orders || [])) {
+        if (!seenKeys.has(o.id)) {
+          seenKeys.add(o.id);
+          unified.push({
+            id: o.id,
+            type: 'order',
+            orderId: o.id,
+            buyerId: o.buyerId,
+            clientName: o.buyerName,
+            clientAvatar: o.buyerAvatar,
+            serviceTitle: o.serviceTitle,
+            contractTitle: o.serviceTitle,
+            unreadCount: 0,
+            messages: o.messages || [],
+            order: o,
+          });
+        }
+      }
+
+      setConversationsList(unified);
+
+      // Auto select first or keep current
+      setSelectedChat(prev => {
+        if (!prev) return unified[0] || null;
+        const match = unified.find(item => item.id === prev.id || (prev.contractId && item.contractId === prev.contractId));
+        return match || unified[0] || null;
+      });
+    } catch (err) {
+      console.error('[SellerDashboard] Error loading conversations:', err);
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
 
   // My Proposals State (Phase 5)
   const [myProposals, setMyProposals] = useState([]);
@@ -510,13 +633,46 @@ export default function SellerDashboard() {
     }
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!chatMessage.trim()) return;
-    orderService.sendMessage(selectedOrderChat.id, chatMessage);
-    setChatMessage('');
-    setSpeechSuggestion(null);
-    setSelectedOrderChat(orderService.getOrderById(selectedOrderChat.id));
+    const text = chatMessage.trim();
+    if (!text || !selectedChat) return;
+
+    if (selectedChat.type === 'order') {
+      orderService.sendMessage(selectedChat.orderId, text);
+      setChatMessage('');
+      setSpeechSuggestion(null);
+      const updatedOrd = orderService.getOrderById(selectedChat.orderId);
+      setChatMessages(updatedOrd?.messages || []);
+      return;
+    }
+
+    let targetConvId = selectedChat.conversationId;
+    if (!targetConvId && selectedChat.projectId) {
+      try {
+        const created = await communicationApi.createConversation(selectedChat.projectId, currentUser?.id);
+        targetConvId = created?.data?.id || created?.id;
+        if (targetConvId) {
+          setSelectedChat(prev => ({ ...prev, conversationId: targetConvId }));
+        }
+      } catch (err) {
+        console.error('[SellerDashboard] Could not create conversation:', err);
+      }
+    }
+
+    if (!targetConvId) return;
+
+    try {
+      await communicationApi.sendMessage(targetConvId, text);
+      setChatMessage('');
+      setSpeechSuggestion(null);
+      const res = await communicationApi.messages(targetConvId);
+      const list = res?.messages || (Array.isArray(res) ? res : []);
+      setChatMessages(list.slice().reverse());
+    } catch (err) {
+      console.error('[SellerDashboard] Failed to send message:', err);
+      alert('Failed to send message: ' + (err.message || 'Unknown error'));
+    }
   };
 
   const totalEarnings = orders.filter(o => o.status === 'completed').reduce((a, c) => a + c.price, 0);
@@ -553,7 +709,48 @@ export default function SellerDashboard() {
   useEffect(() => {
     if (activeTab === 'proposals') fetchMyProposals();
     if (activeTab === 'contracts') fetchMyContracts();
+    if (activeTab === 'messages') fetchConversations();
   }, [activeTab]);
+
+  // Load messages when selectedChat changes
+  useEffect(() => {
+    if (!selectedChat) {
+      setChatMessages([]);
+      return;
+    }
+
+    if (selectedChat.type === 'order') {
+      const ord = orderService.getOrderById(selectedChat.orderId);
+      setChatMessages(ord?.messages || []);
+      return;
+    }
+
+    if (selectedChat.conversationId) {
+      let isMounted = true;
+      const loadMessages = async () => {
+        try {
+          const res = await communicationApi.messages(selectedChat.conversationId);
+          if (isMounted) {
+            const list = res?.messages || (Array.isArray(res) ? res : []);
+            setChatMessages(list.slice().reverse());
+          }
+        } catch (err) {
+          console.warn('[SellerDashboard] Failed to load messages:', err);
+        }
+      };
+
+      loadMessages();
+      communicationApi.markMessagesRead(selectedChat.conversationId).catch(() => {});
+      const pollTimer = setInterval(loadMessages, 5000);
+
+      return () => {
+        isMounted = false;
+        clearInterval(pollTimer);
+      };
+    } else {
+      setChatMessages([]);
+    }
+  }, [selectedChat?.conversationId, selectedChat?.id]);
 
   return (
     <div className="dashboard-container">
@@ -1440,47 +1637,179 @@ export default function SellerDashboard() {
         {/* ======== MESSAGES (RIGHT SPEECH ASSISTANT) ======== */}
         {activeTab === 'messages' && (
           <div>
-            <h2 style={{ marginBottom: 'var(--space-lg)' }}>Client Messages</h2>
-            <div className="messages-layout">
-              <div className="conversations-sidebar">
-                {orders.length === 0 && (
-                  <div style={{ padding: 'var(--space-md)', textAlign: 'center', color: 'var(--color-text-light)', fontSize: 'var(--text-sm)' }}>No conversations yet</div>
-                )}
-                {orders.map(o => (
-                  <div key={o.id} className={`conversation-item ${selectedOrderChat?.id === o.id ? 'conversation-item-active' : ''}`} onClick={() => setSelectedOrderChat(orderService.getOrderById(o.id))}>
-                    <Avatar src={o.buyerAvatar} name={o.buyerName} size={36} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--color-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.buyerName}</div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.serviceTitle}</div>
-                    </div>
-                  </div>
-                ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-lg)' }}>
+              <div>
+                <h2 style={{ margin: 0 }}>Client Messages</h2>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', marginTop: '4px' }}>
+                  Communicate with clients on your contracts and projects.
+                </p>
               </div>
-              <div className="chat-area">
-                {selectedOrderChat ? (
-                  <>
-                    <div className="chat-header flex items-center gap-sm">
-                      <Avatar src={selectedOrderChat.buyerAvatar} name={selectedOrderChat.buyerName} size={32} />
-                      <div>
-                        <div style={{ fontWeight: 'var(--weight-semibold)', color: 'var(--color-text-main)' }}>{selectedOrderChat.buyerName}</div>
-                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-light)' }}>Order {selectedOrderChat.id}</div>
-                      </div>
+              <Button variant="outline" onClick={() => setShowNewChatModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <PlusCircle size={14} />
+                <span>New Conversation</span>
+              </Button>
+            </div>
+
+            {/* NEW CONVERSATION MODAL */}
+            {showNewChatModal && (
+              <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(9,13,22,0.85)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                <div style={{ background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: 32, maxWidth: 480, width: '100%', color: '#fff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>Start a Conversation</h3>
+                    <button onClick={() => setShowNewChatModal(false)} style={{ background: 'none', border: 'none', color: 'var(--color-text-light)', cursor: 'pointer' }}><X size={20} /></button>
+                  </div>
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem', marginBottom: 20 }}>
+                    Select a contract to message the client:
+                  </p>
+                  {myContracts.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--color-text-light)', fontSize: '0.88rem' }}>
+                      No active contracts. Accept proposals to start conversations.
                     </div>
-                    <div className="chat-history">
-                      {(!selectedOrderChat.messages || selectedOrderChat.messages.length === 0) && (
-                        <div style={{ textAlign: 'center', color: 'var(--color-text-light)', padding: 'var(--space-xl) 0', fontSize: 'var(--text-sm)' }}>No messages yet. Say hello!</div>
-                      )}
-                      {selectedOrderChat.messages?.map((m, idx) => {
-                        const isMe = m.senderId === currentUser.id;
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+                      {myContracts.map(c => {
+                        const buyer = c.buyer || c.client || {};
                         return (
-                          <div key={idx} className={`chat-bubble ${isMe ? 'chat-bubble-sent' : 'chat-bubble-received'}`}>
-                            {m.text}
-                            <div style={{ fontSize: '10px', marginTop: '3px', opacity: 0.65, textAlign: 'right' }}>
-                              {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          <div
+                            key={c.id}
+                            onClick={async () => {
+                              setShowNewChatModal(false);
+                              const projId = c.projectId;
+                              const buyerId = c.buyerId || c.clientId;
+                              try {
+                                const created = await communicationApi.createConversation(projId, currentUser?.id);
+                                const convId = created?.data?.id || created?.id;
+                                if (convId) {
+                                  const newConv = {
+                                    id: convId,
+                                    conversationId: convId,
+                                    type: 'contract',
+                                    contractId: c.id,
+                                    projectId: projId,
+                                    buyerId: buyerId,
+                                    clientName: buyer.name || c.buyerName || 'Client',
+                                    clientAvatar: buyer.avatar || '',
+                                    serviceTitle: c.title || 'Project',
+                                    contractTitle: c.title || 'Contract',
+                                    unreadCount: 0,
+                                    contract: c,
+                                  };
+                                  setSelectedChat(newConv);
+                                  fetchConversations();
+                                }
+                              } catch (err) {
+                                console.error('[SellerDashboard] Failed to create conversation:', err);
+                                fetchConversations();
+                              }
+                            }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '12px 16px', borderRadius: 10,
+                              background: 'rgba(255,255,255,0.04)',
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              cursor: 'pointer', transition: 'all 0.15s ease',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                          >
+                            <Avatar src={buyer.avatar} name={buyer.name || c.buyerName || 'Client'} size={36} />
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.92rem' }}>{buyer.name || c.buyerName || 'Client'}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || 'Contract'}</div>
                             </div>
+                            <Send size={14} color="var(--color-accent)" />
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="messages-layout">
+              <div className="conversations-sidebar">
+                {conversationsList.length === 0 ? (
+                  <div style={{ padding: 'var(--space-lg)', textAlign: 'center', color: 'var(--color-text-light)', fontSize: 'var(--text-sm)' }}>
+                    {loadingConversations ? 'Loading conversations...' : 'No conversations yet. Use + New Conversation above.'}
+                  </div>
+                ) : (
+                  conversationsList.map(item => (
+                    <div
+                      key={item.id}
+                      className={`conversation-item ${selectedChat?.id === item.id ? 'conversation-item-active' : ''}`}
+                      onClick={() => setSelectedChat(item)}
+                    >
+                      <Avatar src={item.clientAvatar} name={item.clientName} size={36} />
+                      <div style={{ minWidth: 0, flexGrow: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--color-text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {item.clientName}
+                          </div>
+                          {item.unreadCount > 0 && (
+                            <Badge variant="accent" size="sm">{item.unreadCount}</Badge>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.contractTitle || item.serviceTitle}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="chat-area">
+                {selectedChat ? (
+                  <>
+                    <div className="chat-header flex items-center justify-between">
+                      <div className="flex items-center gap-sm">
+                        <Avatar src={selectedChat.clientAvatar} name={selectedChat.clientName} size={36} />
+                        <div>
+                          <div style={{ fontWeight: 'var(--weight-semibold)', color: 'var(--color-text-main)' }}>
+                            {selectedChat.clientName}
+                          </div>
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-light)' }}>
+                            {selectedChat.contractTitle || selectedChat.serviceTitle}
+                            {selectedChat.contractId && ` • Contract #${selectedChat.contractId}`}
+                          </div>
+                        </div>
+                      </div>
+                      {selectedChat.contractId && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/contracts/${selectedChat.contractId}`)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <Eye size={13} />
+                          <span>View Contract</span>
+                        </Button>
+                      )}
+                    </div>
+                    <div className="chat-history">
+                      {chatMessages.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: 'var(--color-text-light)', padding: 'var(--space-2xl) 0', fontSize: 'var(--text-sm)' }}>
+                          No messages yet. Send a message to begin discussing with {selectedChat.clientName}!
+                        </div>
+                      ) : (
+                        chatMessages.map((m, idx) => {
+                          const isMe = m.senderId === currentUser?.id;
+                          const msgText = m.message || m.text || '';
+                          const timeStr = m.createdAt
+                            ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : (m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+                          return (
+                            <div key={m.id || idx} className={`chat-bubble ${isMe ? 'chat-bubble-sent' : 'chat-bubble-received'}`}>
+                              <div>{msgText}</div>
+                              {timeStr && (
+                                <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.65, textAlign: isMe ? 'right' : 'left' }}>
+                                  {timeStr}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
 
                     {/* RIGHT SPEECH ASSISTANT SUGGESTION BANNER */}
@@ -1494,7 +1823,14 @@ export default function SellerDashboard() {
                     )}
 
                     <form onSubmit={handleSendMessage} className="chat-input-wrapper flex gap-sm">
-                      <input type="text" placeholder="Write your message..." className="form-control" value={chatMessage} onChange={(e) => handleChatMessageChange(e.target.value)} style={{ flexGrow: 1 }} />
+                      <input
+                        type="text"
+                        placeholder={`Write a message to ${selectedChat.clientName}...`}
+                        className="form-control"
+                        value={chatMessage}
+                        onChange={(e) => handleChatMessageChange(e.target.value)}
+                        style={{ flexGrow: 1 }}
+                      />
                       <Button type="submit" variant="primary" style={{ flexShrink: 0 }}>Send</Button>
                     </form>
                   </>

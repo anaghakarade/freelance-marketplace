@@ -77,7 +77,8 @@ export default function BuyerDashboard() {
   const [loadingChatMessages, setLoadingChatMessages] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [speechSuggestion, setSpeechSuggestion] = useState(null);
-  const [expandedOrderId, setExpandedOrderId] = useState(null);
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [newChatProjectId, setNewChatProjectId] = useState('');
 
   // Dana / Give Back State
   const [giveBackModalOrder, setGiveBackModalOrder] = useState(null);
@@ -1214,7 +1215,90 @@ export default function BuyerDashboard() {
                   Communicate with talent working on your contracts and projects.
                 </p>
               </div>
+              <Button variant="outline" onClick={() => setShowNewChatModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <PlusCircle size={14} />
+                <span>New Conversation</span>
+              </Button>
             </div>
+
+            {/* NEW CONVERSATION MODAL */}
+            {showNewChatModal && (
+              <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(9,13,22,0.85)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                <div style={{ background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: 32, maxWidth: 480, width: '100%', color: '#fff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>Start a Conversation</h3>
+                    <button onClick={() => setShowNewChatModal(false)} style={{ background: 'none', border: 'none', color: 'var(--color-text-light)', cursor: 'pointer' }}><X size={20} /></button>
+                  </div>
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem', marginBottom: 20 }}>
+                    Select a contract to message the freelancer:
+                  </p>
+                  {myContracts.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--color-text-light)', fontSize: '0.88rem' }}>
+                      No active contracts. Accept a proposal to start conversations.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+                      {myContracts.map(c => {
+                        const freelancer = c.freelancer || {};
+                        return (
+                          <div
+                            key={c.id}
+                            onClick={async () => {
+                              setShowNewChatModal(false);
+                              const projId = c.projectId;
+                              const freeId = c.freelancerId;
+                              try {
+                                const created = await communicationApi.createConversation(projId, freeId);
+                                const convId = created?.data?.id || created?.id;
+                                if (convId) {
+                                  const newConv = {
+                                    id: convId,
+                                    conversationId: convId,
+                                    type: 'contract',
+                                    contractId: c.id,
+                                    projectId: projId,
+                                    freelancerId: freeId,
+                                    sellerId: freeId,
+                                    sellerName: freelancer.name || 'Freelancer',
+                                    sellerAvatar: freelancer.avatar || '',
+                                    serviceTitle: c.title || 'Project',
+                                    contractTitle: c.title || 'Contract',
+                                    unreadCount: 0,
+                                    contract: c,
+                                  };
+                                  setSelectedChat(newConv);
+                                  fetchConversations();
+                                }
+                              } catch (err) {
+                                console.error('[BuyerDashboard] Failed to create conversation:', err);
+                                fetchConversations();
+                              }
+                            }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '12px 16px', borderRadius: 10,
+                              background: 'rgba(255,255,255,0.04)',
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              cursor: 'pointer', transition: 'all 0.15s ease',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                          >
+                            <Avatar src={freelancer.avatar} name={freelancer.name || 'Freelancer'} size={36} />
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.92rem' }}>{freelancer.name || 'Freelancer'}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || 'Contract'}</div>
+                            </div>
+                            <Mail size={14} color="var(--color-accent)" />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="messages-layout">
               <div className="conversations-sidebar">
                 {conversationsList.length === 0 ? (
