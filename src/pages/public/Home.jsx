@@ -103,12 +103,12 @@ export default function Home() {
   useEffect(() => {
     const timer = setTimeout(() => setHeroVisible(true), 80);
 
-    marketplaceService.getFeaturedServices(4)
-      .then(services => setPopularServices(services || []))
+    marketplaceService.getFeaturedServices(3)
+      .then(services => setPopularServices((services || []).slice(0, 3)))
       .catch(err => console.error('[Home] Failed to load featured services:', err));
 
-    marketplaceService.getTrendingServices(4)
-      .then(services => setTrendingServices(services || []))
+    marketplaceService.getTrendingServices(3)
+      .then(services => setTrendingServices((services || []).slice(0, 3)))
       .catch(err => console.error('[Home] Failed to load trending services:', err));
 
     setTrendingGroups(marketplaceService.getTrendingGroups().slice(0, 4));
@@ -233,7 +233,7 @@ export default function Home() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
-            {popularServices.map((service) => (
+            {popularServices.slice(0, 3).map((service) => (
               <ServiceCard key={service.id} service={service} />
             ))}
           </div>
@@ -468,7 +468,7 @@ export default function Home() {
 
           {/* Trending Services Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
-            {trendingServices.map((service) => (
+            {trendingServices.slice(0, 3).map((service) => (
               <ServiceCard key={service.id} service={service} />
             ))}
           </div>
