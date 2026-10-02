@@ -67,6 +67,7 @@ export default function BuyerDashboard() {
     return () => window.removeEventListener('authChange', handleAuth);
   }, []);
   const [orders, setOrders] = useState([]);
+  const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [selectedOrderForRequirements, setSelectedOrderForRequirements] = useState(null);
   const [requirementsData, setRequirementsData] = useState({});
   const [selectedOrderChat, setSelectedOrderChat] = useState(null);
@@ -216,6 +217,7 @@ export default function BuyerDashboard() {
       orderService.submitRequirements(selectedOrderForRequirements.id, requirementsData);
       setSelectedOrderForRequirements(null);
       setRequirementsData({});
+      setOrders(orderService.getOrdersForUser(currentUser.id, 'buyer'));
       handleTabChange('orders');
     } catch (err) { alert(err.message); }
   };
