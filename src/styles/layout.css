@@ -590,6 +590,27 @@
   gap: var(--space-md);
 }
 
+.footer-meta-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.footer-attribution {
+  font-size: 11px;
+  color: var(--color-text-light);
+}
+
+.footer-attribution .author-name {
+  color: var(--color-accent);
+  font-weight: var(--weight-medium);
+}
+
+.footer-attribution .author-company {
+  color: var(--color-text-main);
+  font-weight: var(--weight-medium);
+}
+
 .footer-brand-logo {
   font-size: var(--text-base);
   font-weight: var(--weight-bold);

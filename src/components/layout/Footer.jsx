@@ -82,7 +82,12 @@ const Footer = () => {
         <div className="footer-bottom-bar">
           <div className="footer-copyright">
             <Link to="/" className="footer-brand-logo">Work<span>Stream</span></Link>
-            <span>&copy; {new Date().getFullYear()} {t('footer.copyright')}</span>
+            <div className="footer-meta-info">
+              <span>&copy; {new Date().getFullYear()} {t('footer.copyright')}</span>
+              <span className="footer-attribution">
+                By <span className="author-name">Anagha Karade</span> &bull; In association with <span className="author-company">UGTI India Private Limited</span>
+              </span>
+            </div>
           </div>
 
           <div className="footer-social-links">
