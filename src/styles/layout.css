@@ -616,10 +616,14 @@
 }
 
 .footer-ugti-logo {
-  height: 22px;
-  width: auto;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
-  background: transparent;
+  border-radius: 50%;
+  background: #ffffff;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   vertical-align: middle;
   flex-shrink: 0;
   display: inline-block;
