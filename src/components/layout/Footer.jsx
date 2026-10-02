@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
 import { useTranslation } from '../../i18n/i18n';
+import ugtiLogo from '../../assets/ugti-logo.jpg';
 
 const Footer = () => {
   const { locale, t } = useTranslation();
@@ -85,7 +86,12 @@ const Footer = () => {
             <div className="footer-meta-info">
               <span>&copy; {new Date().getFullYear()} {t('footer.copyright')}</span>
               <span className="footer-attribution">
-                By <span className="author-name">Anagha Karade</span> &bull; In association with <span className="author-company">UGTI India Private Limited</span>
+                <span>By <span className="author-name">Anagha Karade</span></span>
+                <span className="footer-attribution-separator">&bull;</span>
+                <span className="footer-ugti-partner">
+                  <img src={ugtiLogo} alt="UGTI India" className="footer-ugti-logo" />
+                  <span>In association with <span className="author-company">UGTI India Private Limited</span></span>
+                </span>
               </span>
             </div>
           </div>
