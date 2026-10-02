@@ -616,14 +616,16 @@
 }
 
 .footer-ugti-logo {
-  height: 20px;
-  width: auto;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
-  border-radius: 3px;
+  border-radius: 50%;
   background: #ffffff;
-  padding: 1px 3px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  padding: 2px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   vertical-align: middle;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
 }
 
 .footer-attribution .author-name {

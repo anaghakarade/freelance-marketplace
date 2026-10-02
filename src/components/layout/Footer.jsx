@@ -86,7 +86,7 @@ const Footer = () => {
             <div className="footer-meta-info">
               <span>&copy; {new Date().getFullYear()} {t('footer.copyright')}</span>
               <span className="footer-attribution">
-                <span>By <span className="author-name">Anagha Karade</span></span>
+                <span>Website developed by <span className="author-name">Anagha Karade</span></span>
                 <span className="footer-attribution-separator">&bull;</span>
                 <span className="footer-ugti-partner">
                   <img src={ugtiLogo} alt="UGTI India" className="footer-ugti-logo" />
