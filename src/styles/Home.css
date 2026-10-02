@@ -532,14 +532,11 @@
   border-color: rgba(16, 185, 129, 0.3);
 }
 
-.bento-large {
-  @media (min-width: 768px) {
+@media (min-width: 768px) {
+  .bento-large {
     grid-column: span 2;
   }
-}
-
-.bento-tall {
-  @media (min-width: 768px) {
+  .bento-tall {
     grid-row: span 2;
   }
 }

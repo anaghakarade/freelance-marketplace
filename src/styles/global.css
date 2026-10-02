@@ -12,12 +12,13 @@
 }
 
 html {
-  height: 100%;
+  min-height: 100%;
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
-  height: 100%;
+  min-height: 100vh;
   font-family: var(--font-family);
   font-size: 16px;
   color: var(--color-text-main);
@@ -25,6 +26,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  overflow-x: hidden;
   /* Layered ambient background */
   background-image: var(--bg-gradient);
   background-attachment: fixed;
@@ -44,6 +46,13 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.main-content {
+  flex: 1 0 auto;
+  width: 100%;
 }
 
 /* Typography Hierarchy */

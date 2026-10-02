@@ -203,6 +203,7 @@ const FreelanceProjectScene = () => {
         userSelect: 'none',
         cursor:     'default',
         fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+        pointerEvents: 'none',
       }}
     >
 

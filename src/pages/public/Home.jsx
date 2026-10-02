@@ -36,7 +36,7 @@ function useReveal() {
     if (!ref.current) return;
     const obs = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
-      { threshold: 0.1 }
+      { threshold: 0.05, rootMargin: '0px 0px 50px 0px' }
     );
     obs.observe(ref.current);
     return () => obs.disconnect();
