@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
 import { useTranslation } from '../../i18n/i18n';
-import ugtiLogo from '../../assets/ugti-logo.jpg';
+import ugtiLogo from '../../assets/ugti-logo.png';
 
 const Footer = () => {
   const { locale, t } = useTranslation();
